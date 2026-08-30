@@ -1,0 +1,38 @@
+{
+  "name": "lift-platform",
+  "private": true,
+  "version": "1.0.0",
+  "description": "L-Y-F-T — a modular, end-to-end ridehail platform: rider app, driver app, dispatch backend, ops console, and fleet simulator.",
+  "workspaces": [
+    "packages/*",
+    "services/*",
+    "apps/*",
+    "tools/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "tsc -b packages/core packages/geo packages/sdk services/api tools/simulator",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint . --ext .ts,.tsx",
+    "api": "npm run dev -w @lift/api",
+    "sim": "npm run dev -w @lift/simulator",
+    "rider": "npm run start -w @lift/rider",
+    "driver": "npm run start -w @lift/driver",
+    "admin": "npm run dev -w @lift/admin",
+    "platform": "concurrently -n api,sim -c cyan,magenta \"npm run api\" \"npm run sim\"",
+    "seed": "npm run seed -w @lift/api",
+    "db:generate": "npm run db:generate -w @lift/api",
+    "db:migrate": "npm run db:migrate -w @lift/api"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "concurrently": "^9.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
