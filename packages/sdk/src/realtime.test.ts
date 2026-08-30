@@ -7,7 +7,12 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { RealtimeClient, channels, type WebSocketLike } from './realtime.js';
+import {
+  RealtimeClient,
+  channels,
+  type RealtimeClientOptions,
+  type WebSocketLike,
+} from './realtime.js';
 
 /** A WebSocket you drive by hand. */
 class FakeSocket implements WebSocketLike {
@@ -58,7 +63,7 @@ class FakeSocket implements WebSocketLike {
 
 const latest = (): FakeSocket => FakeSocket.instances[FakeSocket.instances.length - 1]!;
 
-const makeClient = (options: Partial<Parameters<typeof RealtimeClient.prototype.constructor>[0]> = {}) =>
+const makeClient = (options: Partial<RealtimeClientOptions> = {}): RealtimeClient =>
   new RealtimeClient({
     url: () => 'ws://test/realtime?token=abc',
     createWebSocket: (url) => new FakeSocket(url),

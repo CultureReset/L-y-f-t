@@ -15,6 +15,7 @@ import type {
   EarningsSummary,
   FareBreakdown,
   LatLng,
+  Money,
   PaymentMethod,
   Place,
   Position,
@@ -210,7 +211,7 @@ export interface RideDurations {
 }
 
 export interface CancellationPreview {
-  readonly fee: { readonly amount: number; readonly currency: string };
+  readonly fee: Money;
   readonly waived: boolean;
   readonly explanation: string;
   readonly freeWindowRemainingMs?: number;
@@ -229,7 +230,7 @@ export interface ReceiptResponse {
       readonly id: string;
       readonly kind: string;
       readonly status: string;
-      readonly amount: { readonly amount: number; readonly currency: string };
+      readonly amount: Money;
     }[];
   } | null;
 }
@@ -277,7 +278,7 @@ export interface EarningsResponse {
     readonly completedAt?: number;
     readonly pickup: string;
     readonly dropoff: string;
-    readonly payout?: { readonly amount: number; readonly currency: string };
+    readonly payout?: Money;
     readonly distanceMeters?: number;
     readonly rating?: number;
   }[];

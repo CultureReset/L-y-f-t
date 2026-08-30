@@ -196,8 +196,12 @@ export const seedDemoData = async (
     await container.repositories.vehicles.create(vehicle);
 
     // Scatter drivers around the centre, all reporting a fresh position so
-    // dispatch treats them as live.
-    const spot = destination(center, random.float(0, 360), random.float(200, spread));
+    // dispatch treats them as live. The demo driver is parked right at the
+    // centre, so the documented walkthrough reliably reaches them rather than
+    // whichever neighbour happened to be closer.
+    const spot = isDemoDriver
+      ? destination(center, 0, 120)
+      : destination(center, random.float(0, 360), random.float(600, spread));
     const position: Position = {
       lat: spot.lat,
       lng: spot.lng,

@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "Lyft Clone Driver",
+    "slug": "lift-driver",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "liftdriver",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#0C0C0F",
+      "resizeMode": "contain"
+    },
+    "android": {
+      "package": "com.lift.driver",
+      "adaptiveIcon": { "backgroundColor": "#0C0C0F" },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "WAKE_LOCK"
+      ],
+      "edgeToEdgeEnabled": true
+    },
+    "ios": {
+      "bundleIdentifier": "com.lift.driver",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Your location is shared with riders while you are online so they can see you on the way.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Your location keeps updating while you are on a trip, even with the app in the background.",
+        "UIBackgroundModes": ["location"]
+      }
+    },
+    "web": { "bundler": "metro", "output": "single" },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Your location is shared with riders while you are online.",
+          "isAndroidBackgroundLocationEnabled": true
+        }
+      ]
+    ],
+    "experiments": { "typedRoutes": false }
+  }
+}
