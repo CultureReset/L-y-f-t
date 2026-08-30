@@ -20,6 +20,7 @@ import type {
   TileConfig,
   TravelEstimate,
 } from '../types.js';
+import { UNREACHABLE } from '../types.js';
 import { httpJson, type HttpClient } from '../http.js';
 
 const GEOCODE = 'https://api.mapbox.com/geocoding/v5/mapbox.places';
@@ -170,10 +171,18 @@ export class MapboxGeoProvider implements GeoProvider {
       `${MATRIX}/driving-traffic/${coords}?${params}`,
     );
     return (response.durations ?? []).map((row, i) =>
-      row.map((duration, j) => ({
-        durationMs: Math.round((duration ?? 0) * 1000),
-        distanceMeters: Math.round(response.distances?.[i]?.[j] ?? 0),
-      })),
+      row.map((duration, j) => {
+        // A null duration means no route exists between that pair.
+        if (duration === null || duration === undefined) return UNREACHABLE;
+        const distance = response.distances?.[i]?.[j];
+        return {
+          durationMs: Math.round(duration * 1000),
+          distanceMeters:
+            distance === null || distance === undefined
+              ? Number.POSITIVE_INFINITY
+              : Math.round(distance),
+        };
+      }),
     );
   }
 
@@ -184,6 +193,9 @@ export class MapboxGeoProvider implements GeoProvider {
       attribution: '© Mapbox © OpenStreetMap',
       maxZoom: 22,
       apiKeyParam: 'access_token',
+      // A `pk.` token is a public token by design; restrict it by URL in the
+      // Mapbox dashboard rather than trying to keep it off the device.
+      apiKey: this.options.accessToken,
     };
   }
 

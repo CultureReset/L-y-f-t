@@ -340,7 +340,14 @@ export class DispatchRuntime {
         destinations: [pickup],
         departAt: this.deps.clock.now(),
       });
-      return origins.map((_, i) => matrix[i]?.[0]);
+      return origins.map((_, i) => {
+        const estimate = matrix[i]?.[0];
+        // An unreachable pair comes back as Infinity. Treating it as "no
+        // estimate" falls through to the straight-line path below rather than
+        // ranking that driver as instantly available.
+        if (!estimate || !Number.isFinite(estimate.durationMs)) return undefined;
+        return estimate;
+      });
     } catch (e) {
       // A routing outage must not stop dispatch; fall back to straight lines.
       this.deps.logger?.error({ err: e }, 'ETA matrix failed; using straight-line estimates');

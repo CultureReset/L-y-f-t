@@ -24,6 +24,7 @@ import type {
   TileConfig,
   TravelEstimate,
 } from '../types.js';
+import { UNREACHABLE } from '../types.js';
 import { httpJson, type HttpClient } from '../http.js';
 
 const BASE = 'https://maps.googleapis.com/maps/api';
@@ -195,10 +196,15 @@ export class GoogleGeoProvider implements GeoProvider {
     );
     assertOk(response.status, response.error_message);
     return (response.rows ?? []).map((row) =>
-      (row.elements ?? []).map((el) => ({
-        distanceMeters: el.distance?.value ?? Number.POSITIVE_INFINITY,
-        durationMs: (el.duration_in_traffic?.value ?? el.duration?.value ?? 0) * 1000,
-      })),
+      (row.elements ?? []).map((el) => {
+        // Google reports an unroutable pair per element, not for the request.
+        const seconds = el.duration_in_traffic?.value ?? el.duration?.value;
+        if (el.status !== 'OK' || seconds === undefined) return UNREACHABLE;
+        return {
+          distanceMeters: el.distance?.value ?? Number.POSITIVE_INFINITY,
+          durationMs: seconds * 1000,
+        };
+      }),
     );
   }
 
@@ -209,6 +215,9 @@ export class GoogleGeoProvider implements GeoProvider {
       attribution: '© Google',
       maxZoom: 21,
       apiKeyParam: 'key',
+      // Static Maps keys are fetched by the device. Restrict this one by
+      // referrer and bundle id in the Google Cloud console.
+      apiKey: this.options.apiKey,
     };
   }
 
@@ -355,6 +364,12 @@ interface GoogleMatrixResponse {
   status: string;
   error_message?: string;
   rows?: {
-    elements?: { distance?: GoogleValue; duration?: GoogleValue; duration_in_traffic?: GoogleValue }[];
+    elements?: {
+      // Per-element, so one unroutable pair does not fail the whole request.
+      status?: string;
+      distance?: GoogleValue;
+      duration?: GoogleValue;
+      duration_in_traffic?: GoogleValue;
+    }[];
   }[];
 }

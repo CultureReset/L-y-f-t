@@ -131,6 +131,19 @@ export interface TravelEstimate {
   readonly durationMs: number;
 }
 
+/**
+ * What an unreachable pair costs.
+ *
+ * Not zero. A vendor says "no route" with a null or a status code, and mapping
+ * that to `0` makes an unreachable driver look like the nearest one — dispatch
+ * ranks on this number. Infinity is the honest answer, and every caller
+ * already has to handle a missing estimate.
+ */
+export const UNREACHABLE: TravelEstimate = {
+  distanceMeters: Number.POSITIVE_INFINITY,
+  durationMs: Number.POSITIVE_INFINITY,
+};
+
 export interface MatrixRequest {
   readonly origins: readonly LatLng[];
   readonly destinations: readonly LatLng[];
@@ -145,7 +158,21 @@ export interface TileConfig {
   readonly styleUrl?: string;
   readonly attribution: string;
   readonly maxZoom: number;
+  /** Query parameter the key goes in, when the vendor wants one. */
   readonly apiKeyParam?: string;
+  /**
+   * The key itself.
+   *
+   * This reaches every client, and is meant to: a basemap is fetched by the
+   * device, so there is no arrangement in which the key stays secret. Both
+   * Mapbox and Google issue keys for exactly this and expect them to be
+   * restricted by URL or bundle id at the vendor rather than hidden. Naming
+   * the parameter without supplying the value was worse than either: no map
+   * rendered, and the key looked protected when nothing was protecting it.
+   *
+   * Use a public, restricted key here — never a secret one.
+   */
+  readonly apiKey?: string;
 }
 
 /**
