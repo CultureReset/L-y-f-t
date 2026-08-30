@@ -33,7 +33,9 @@
       "compileSdkVersion": 35,
       "targetSdkVersion": 35,
       "blockedPermissions": [
-        "com.google.android.gms.permission.AD_ID"
+        "com.google.android.gms.permission.AD_ID",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
     },
     "ios": {

@@ -15,9 +15,31 @@ someone set up once and forgot.
 - **`eas.json`** defines three profiles: `development` (dev client, points at
   the emulator's host loopback), `preview` (internal APK against staging), and
   `production` (an app bundle against production).
-- **`AD_ID` is blocked** in both apps. Neither collects an advertising ID, and
-  declaring the permission would force a "yes" on the advertising question in
-  the Data safety form.
+- **Permissions neither app uses are blocked** in both. A dependency's manifest
+  is merged into yours, so a library you use for one small thing can add a
+  permission you then have to justify to Play. `blockedPermissions` in
+  `app.json` removes them:
+  - `AD_ID` — neither app collects an advertising ID, and declaring it would
+    force a "yes" on the Data safety advertising question.
+  - `READ_EXTERNAL_STORAGE` / `WRITE_EXTERNAL_STORAGE` — added by
+    `expo-file-system`, which neither app uses outside its own sandbox. Broad
+    storage access needs a declaration neither app could honestly make.
+
+  Two permissions do survive and are correct: `RECEIVE_BOOT_COMPLETED`, which
+  `expo-notifications` needs to restore scheduled notifications after a
+  restart, and the launcher badge permissions, which are how a badge count
+  reaches the home screen on Samsung, Huawei, and Oppo devices.
+
+  Verify what actually shipped, rather than what you declared:
+
+  ```bash
+  $ANDROID_HOME/build-tools/35.0.0/aapt2 dump permissions \
+    apps/rider/android/app/build/outputs/apk/debug/app-debug.apk
+  ```
+
+  A debug build additionally carries `SYSTEM_ALERT_WINDOW`, which React
+  Native's dev menu needs; it is absent from a release build. Check a release
+  build before submitting.
 
 ## Building
 
