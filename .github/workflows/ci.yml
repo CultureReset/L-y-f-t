@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  verify:
+    name: Typecheck and test
+    runs-on: ubuntu-latest
+
+    services:
+      # The repository conformance suite runs against both stores; without a
+      # real database the PostgreSQL half is skipped and drift goes unnoticed.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: lift
+          POSTGRES_DB: lift_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci --legacy-peer-deps
+
+      - name: Typecheck every package, service, and app
+        run: |
+          npx tsc -p tsconfig.json
+          npx tsc -p packages/ui/tsconfig.json
+          npm run typecheck -w @lift/admin
+          npm run typecheck -w @lift/rider
+          npm run typecheck -w @lift/driver
+
+      - name: Test
+        run: npm test
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:lift@localhost:5432/lift_test
+
+  bundle:
+    name: Bundle the apps
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --legacy-peer-deps
+
+      # Metro resolves differently from tsc, so a clean typecheck does not prove
+      # the apps bundle. Building them here catches that.
+      - run: npx expo export --platform web
+        working-directory: apps/rider
+      - run: npx expo export --platform web
+        working-directory: apps/driver
+      - run: npm run build -w @lift/admin

@@ -60,10 +60,11 @@ available but has no app running, so it absorbs offers until each one times out.
 Sign in to either app with **any phone number** and the code **`000000`**.
 Two accounts are seeded with history:
 
-| Who         | Phone            |
-| ----------- | ---------------- |
-| Demo rider  | `415 555 0100`   |
-| Demo driver | `415 555 0199`   |
+| Who           | Phone            |
+| ------------- | ---------------- |
+| Demo rider    | `415 555 0100`   |
+| Demo driver   | `415 555 0199`   |
+| Ops console   | `415 555 0000`   |
 
 The demo driver is parked at the market centre, so booking a ride in the rider
 app reliably lands the offer on the driver app.
@@ -373,6 +374,29 @@ services/api/src/
   repositories/            ports, memory store, postgres store, conformance suite
   services/                the orchestration layer
 ```
+
+## With a real database
+
+```bash
+docker compose up          # PostgreSQL + the API on :4000
+```
+
+Or point the API at your own:
+
+```bash
+STORE=postgres DATABASE_URL=postgres://… npm run api
+```
+
+The schema is applied at startup from `services/api/src/repositories/postgres/schema.sql`.
+
+---
+
+## Further reading
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — how it fits together and why.
+- [`docs/EXTENDING.md`](docs/EXTENDING.md) — recipes: a new place source, a new
+  class of service, a new fare rule, a different mapping vendor, a real payment
+  processor, a second market.
 
 ## Licence
 
