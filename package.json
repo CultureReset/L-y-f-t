@@ -2,7 +2,7 @@
   "name": "lift-platform",
   "private": true,
   "version": "1.0.0",
-  "description": "L-Y-F-T \u2014 a modular, end-to-end ridehail platform: rider app, driver app, dispatch backend, ops console, and fleet simulator.",
+  "description": "L-Y-F-T — a modular, end-to-end ridehail platform: rider app, driver app, dispatch backend, ops console, and fleet simulator.",
   "workspaces": [
     "packages/*",
     "services/*",
@@ -14,7 +14,7 @@
   },
   "scripts": {
     "build": "npm run typecheck && npm run test",
-    "typecheck": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p packages/ui/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint . --ext .ts,.tsx",
@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "@types/react": "^19.2.18",
     "concurrently": "^9.1.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",

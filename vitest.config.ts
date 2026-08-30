@@ -15,6 +15,7 @@ export default defineConfig({
       '@lift/core': new URL('./packages/core/src/index.ts', import.meta.url).pathname,
       '@lift/geo': new URL('./packages/geo/src/index.ts', import.meta.url).pathname,
       '@lift/sdk': new URL('./packages/sdk/src/index.ts', import.meta.url).pathname,
+      '@lift/ui': new URL('./packages/ui/src/index.ts', import.meta.url).pathname,
     },
   },
 });

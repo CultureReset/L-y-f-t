@@ -4,7 +4,9 @@
     "baseUrl": "."
   },
   "include": [
-    "packages/*/src/**/*",
+    "packages/core/src/**/*",
+    "packages/geo/src/**/*",
+    "packages/sdk/src/**/*",
     "services/*/src/**/*",
     "tools/*/src/**/*",
     "vitest.config.ts"
