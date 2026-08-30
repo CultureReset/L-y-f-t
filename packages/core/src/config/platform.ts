@@ -81,6 +81,25 @@ export const platformConfigSchema = z.object({
     })
     .default({}),
 
+  /**
+   * How verification codes and push notifications actually reach a person.
+   * Both default to the console, so a fresh clone needs no vendor account.
+   */
+  notifications: z
+    .object({
+      /** `console` or `twilio`. */
+      smsProvider: z.string().default('console'),
+      twilioAccountSid: z.string().optional(),
+      twilioAuthToken: z.string().optional(),
+      /** A sending number, or a Messaging Service SID starting `MG`. */
+      twilioFrom: z.string().optional(),
+      /** `console` or `expo`. */
+      pushProvider: z.string().default('console'),
+      /** Only needed for Expo projects with push security enabled. */
+      expoAccessToken: z.string().optional(),
+    })
+    .default({}),
+
   realtime: z
     .object({
       /** How often a driver app pushes its location while on a ride. */

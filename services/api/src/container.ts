@@ -12,7 +12,9 @@
 import {
   RideTypeCatalog,
   TypedEmitter,
+  defaultHelpCenter,
   defaultRideTypes,
+  defaultTicketCatalog,
   combineSurge,
   demandSurgeProvider,
   flatSurgeProvider,
@@ -21,12 +23,14 @@ import {
   systemClock,
   type Clock,
   type DemandSnapshot,
+  type HelpCenter,
   type MatchingStrategy,
   type PaymentGateway,
   type PlatformConfig,
   type PlatformEvents,
   type RideType,
   type SurgeProvider,
+  type TicketCatalog,
 } from '@lift/core';
 import {
   PlaceSourceRegistry,
@@ -44,6 +48,9 @@ import type { Repositories } from './repositories/types.js';
 import { createMemoryRepositories } from './repositories/memory/index.js';
 import { createPostgresRepositories } from './repositories/postgres/index.js';
 import { AuthService, consoleCodeSender, type CodeSender } from './services/authService.js';
+import { createStripeGateway } from './integrations/stripeGateway.js';
+import { createTwilioSender } from './integrations/twilioSender.js';
+import { createExpoPushTransport, createMemoryTokenStore } from './integrations/expoPush.js';
 import { PricingService } from './services/pricingService.js';
 import { PaymentService, createMemoryGateway } from './services/paymentService.js';
 import { DispatchRuntime } from './services/dispatchRuntime.js';
@@ -51,6 +58,7 @@ import { RideService } from './services/rideService.js';
 import { DriverService } from './services/driverService.js';
 import { RiderService } from './services/riderService.js';
 import { ChatService } from './services/chatService.js';
+import { SupportService } from './services/supportService.js';
 import {
   NotificationService,
   consolePushTransport,
@@ -71,6 +79,9 @@ export interface ContainerOverrides {
   /** Extra place sources — this is where an integration is registered. */
   readonly placeSources?: readonly PlaceSource[];
   readonly matchingStrategy?: MatchingStrategy;
+  /** Replace or extend the shipped help articles and ticket categories. */
+  readonly helpCenter?: HelpCenter;
+  readonly ticketCatalog?: TicketCatalog;
   readonly logger?: Logger;
 }
 
@@ -114,7 +125,10 @@ export interface Container {
   readonly drivers: DriverService;
   readonly riders: RiderService;
   readonly chat: ChatService;
+  readonly support: SupportService;
   readonly notifications: NotificationService;
+  /** Device tokens for push, so the apps can register on launch. */
+  readonly pushTokens: ReturnType<typeof createMemoryTokenStore>;
   readonly logger: Logger;
   /** Start background loops: dispatch, realtime, notifications, scheduler. */
   start(): void;
@@ -177,14 +191,16 @@ export const createContainer = async (
     },
   );
 
+  // Device tokens live here so both the push transport and the route that
+  // registers a device share one store.
+  const pushTokens = createMemoryTokenStore();
+
   const hub = new RealtimeHub(events, {
     heartbeatIntervalMs: config.realtime.heartbeatIntervalMs,
     logger,
   });
 
-  const gateway =
-    overrides.gateway ??
-    createMemoryGateway({ declineRate: config.payments.simulatedDeclineRate });
+  const gateway = overrides.gateway ?? buildGateway(config, logger);
 
   const payments = new PaymentService({
     gateway,
@@ -202,7 +218,7 @@ export const createContainer = async (
     drivers: repositories.drivers,
     clock,
     events,
-    sender: overrides.codeSender ?? consoleCodeSender((m) => logger.info({}, m)),
+    sender: overrides.codeSender ?? buildCodeSender(config, logger),
     market: config.market,
     options: serverConfig.devAuthCode
       ? { fixedCode: serverConfig.devAuthCode, allowFixedCode: true }
@@ -311,9 +327,18 @@ export const createContainer = async (
     events,
   });
 
+  const support = new SupportService({
+    support: repositories.support,
+    rides: repositories.rides,
+    helpCenter: overrides.helpCenter ?? defaultHelpCenter(),
+    ticketCatalog: overrides.ticketCatalog ?? defaultTicketCatalog(),
+    clock,
+    events,
+  });
+
   const notifications = new NotificationService(
     events,
-    overrides.pushTransport ?? consolePushTransport((m) => logger.info({}, m)),
+    overrides.pushTransport ?? buildPushTransport(config, pushTokens, logger),
   );
 
   let scheduler: ReturnType<typeof setInterval> | undefined;
@@ -337,7 +362,9 @@ export const createContainer = async (
     drivers,
     riders,
     chat,
+    support,
     notifications,
+    pushTokens,
     logger,
 
     start() {
@@ -363,6 +390,77 @@ export const createContainer = async (
       await repositories.close();
     },
   };
+};
+
+/**
+ * Payments. The in-memory gateway is the default and needs no account; naming a
+ * real one requires its key, and a missing key is a boot failure rather than a
+ * silent fallback that would take payments nowhere.
+ */
+const buildGateway = (config: PlatformConfig, logger: Logger): PaymentGateway => {
+  switch (config.payments.gateway) {
+    case 'memory':
+      return createMemoryGateway({ declineRate: config.payments.simulatedDeclineRate });
+    case 'stripe': {
+      if (!config.payments.apiKey) {
+        throw new Error('PAYMENT_API_KEY is required when PAYMENT_GATEWAY=stripe');
+      }
+      logger.info({}, 'payments: using Stripe');
+      return createStripeGateway({
+        secretKey: config.payments.apiKey,
+        statementDescriptor: config.brandName.slice(0, 22),
+      });
+    }
+    default:
+      throw new Error(`Unknown payment gateway "${config.payments.gateway}"`);
+  }
+};
+
+/** Verification codes: logged in development, sent for real in production. */
+const buildCodeSender = (config: PlatformConfig, logger: Logger): CodeSender => {
+  const sms = config.notifications.smsProvider;
+  if (sms === 'console') return consoleCodeSender((m) => logger.info({}, m));
+
+  if (sms === 'twilio') {
+    const { twilioAccountSid, twilioAuthToken, twilioFrom } = config.notifications;
+    if (!twilioAccountSid || !twilioAuthToken || !twilioFrom) {
+      throw new Error(
+        'TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM are required when SMS_PROVIDER=twilio',
+      );
+    }
+    logger.info({}, 'sms: using Twilio');
+    return createTwilioSender({
+      accountSid: twilioAccountSid,
+      authToken: twilioAuthToken,
+      from: twilioFrom,
+      brandName: config.brandName,
+      logger,
+    });
+  }
+  throw new Error(`Unknown SMS provider "${sms}"`);
+};
+
+/** Push notifications: logged in development, delivered through Expo otherwise. */
+const buildPushTransport = (
+  config: PlatformConfig,
+  tokens: ReturnType<typeof createMemoryTokenStore>,
+  logger: Logger,
+): PushTransport => {
+  switch (config.notifications.pushProvider) {
+    case 'console':
+      return consolePushTransport((m) => logger.info({}, m));
+    case 'expo':
+      logger.info({}, 'push: using Expo');
+      return createExpoPushTransport({
+        tokens,
+        logger,
+        ...(config.notifications.expoAccessToken
+          ? { accessToken: config.notifications.expoAccessToken }
+          : {}),
+      });
+    default:
+      throw new Error(`Unknown push provider "${config.notifications.pushProvider}"`);
+  }
 };
 
 /** Build the configured surge provider. */

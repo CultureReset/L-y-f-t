@@ -38,6 +38,8 @@ import {
   type RiderProfile,
   type SavedPlace,
   type SessionId,
+  type SupportTicket,
+  type TicketId,
   type User,
   type UserId,
   type Vehicle,
@@ -57,6 +59,8 @@ import type {
   SessionRecord,
   SessionRepository,
   ShiftRepository,
+  SupportRepository,
+  TicketQuery,
   UserRepository,
   VehicleRepository,
   VerificationRecord,
@@ -616,6 +620,51 @@ class MemoryChatRepository implements ChatRepository {
  * codes, pending offers — must agree with whatever clock the rest of the
  * platform is running on, including a hand-driven one in tests.
  */
+class MemorySupportRepository implements SupportRepository {
+  private readonly byId = new Map<TicketId, SupportTicket>();
+
+  async create(ticket: SupportTicket): Promise<SupportTicket> {
+    this.byId.set(ticket.id, ticket);
+    return ticket;
+  }
+
+  async findById(id: TicketId): Promise<SupportTicket | undefined> {
+    return this.byId.get(id);
+  }
+
+  async save(ticket: SupportTicket, expectedUpdatedAt?: number): Promise<SupportTicket | undefined> {
+    const current = this.byId.get(ticket.id);
+    if (!current) throw notFound(`Ticket ${ticket.id}`);
+    // Same optimistic guard as rides: a stale writer loses rather than wins.
+    if (expectedUpdatedAt !== undefined && current.updatedAt !== expectedUpdatedAt) {
+      return undefined;
+    }
+    this.byId.set(ticket.id, ticket);
+    return ticket;
+  }
+
+  async query(query: TicketQuery): Promise<SupportTicket[]> {
+    let tickets = [...this.byId.values()];
+    if (query.requesterId) tickets = tickets.filter((t) => t.requesterId === query.requesterId);
+    if (query.rideId) tickets = tickets.filter((t) => t.rideId === query.rideId);
+    if (query.statuses) {
+      const wanted = new Set(query.statuses);
+      tickets = tickets.filter((t) => wanted.has(t.status));
+    }
+    // Most recently touched first — a support queue is read newest-activity down.
+    tickets.sort((a, b) => b.updatedAt - a.updatedAt);
+    return query.limit ? tickets.slice(0, query.limit) : tickets;
+  }
+
+  async countByStatus(): Promise<Record<string, number>> {
+    const counts: Record<string, number> = {};
+    for (const ticket of this.byId.values()) {
+      counts[ticket.status] = (counts[ticket.status] ?? 0) + 1;
+    }
+    return counts;
+  }
+}
+
 export const createMemoryRepositories = (clock: Clock = systemClock): Repositories => {
   const rides = new MemoryRideRepository();
   const charges = new MemoryChargeRepository();
@@ -632,6 +681,7 @@ export const createMemoryRepositories = (clock: Clock = systemClock): Repositori
     paymentMethods: new MemoryPaymentMethodRepository(),
     charges,
     chat: new MemoryChatRepository(),
+    support: new MemorySupportRepository(),
     close: async () => {},
   };
 };

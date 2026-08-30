@@ -31,6 +31,10 @@ const Navigator = (): React.JSX.Element => {
         <Stack.Screen name="activity" />
         <Stack.Screen name="account" />
         <Stack.Screen name="wallet" />
+        <Stack.Screen name="settings" />
+        <Stack.Screen name="safety" options={{ animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="support" />
+        <Stack.Screen name="ticket/[id]" />
       </Stack>
     </>
   );

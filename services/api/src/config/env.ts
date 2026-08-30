@@ -116,6 +116,14 @@ export const loadConfigFromEnv = (): PlatformConfig => {
       captureOnComplete: bool('PAYMENT_CAPTURE_ON_COMPLETE', true),
       ...(str('PAYMENT_API_KEY') ? { apiKey: str('PAYMENT_API_KEY')! } : {}),
     },
+    notifications: {
+      smsProvider: str('SMS_PROVIDER', 'console'),
+      pushProvider: str('PUSH_PROVIDER', 'console'),
+      ...(str('TWILIO_ACCOUNT_SID') ? { twilioAccountSid: str('TWILIO_ACCOUNT_SID')! } : {}),
+      ...(str('TWILIO_AUTH_TOKEN') ? { twilioAuthToken: str('TWILIO_AUTH_TOKEN')! } : {}),
+      ...(str('TWILIO_FROM') ? { twilioFrom: str('TWILIO_FROM')! } : {}),
+      ...(str('EXPO_ACCESS_TOKEN') ? { expoAccessToken: str('EXPO_ACCESS_TOKEN')! } : {}),
+    },
     realtime: {
       driverPingIntervalMs: num('DRIVER_PING_INTERVAL_MS', 4_000),
       staleLocationMs: num('DRIVER_STALE_LOCATION_MS', 60_000),

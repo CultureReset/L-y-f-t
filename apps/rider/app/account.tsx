@@ -128,6 +128,9 @@ export default function Account(): React.JSX.Element {
         <Column gap="sm">
           <Button label="Wallet" variant="secondary" onPress={() => router.push('/wallet')} />
           <Button label="Your trips" variant="secondary" onPress={() => router.push('/activity')} />
+          <Button label="Settings" variant="secondary" onPress={() => router.push('/settings')} />
+          <Button label="Safety" variant="secondary" onPress={() => router.push('/safety')} />
+          <Button label="Help" variant="secondary" onPress={() => router.push('/support')} />
           <Button
             label="Sign out"
             variant="ghost"

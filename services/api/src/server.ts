@@ -17,6 +17,7 @@ import { registerDriverRoutes } from './http/routes/drivers.js';
 import { registerRiderRoutes } from './http/routes/riders.js';
 import { registerPlaceRoutes } from './http/routes/places.js';
 import { registerAdminRoutes } from './http/routes/admin.js';
+import { registerSupportRoutes } from './http/routes/support.js';
 import { registerRealtimeRoutes } from './http/routes/realtime.js';
 
 export const buildServer = async (container: Container): Promise<FastifyInstance> => {
@@ -88,6 +89,7 @@ export const buildServer = async (container: Container): Promise<FastifyInstance
       registerRiderRoutes(api, container);
       registerPlaceRoutes(api, container);
       registerAdminRoutes(api, container);
+      registerSupportRoutes(api, container);
       registerRealtimeRoutes(api, container);
     },
     { prefix: '/v1' },

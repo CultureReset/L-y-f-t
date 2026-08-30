@@ -14,6 +14,7 @@ export * from './components/Text.js';
 export * from './components/Button.js';
 export * from './components/Surface.js';
 export * from './components/Avatar.js';
+export * from './components/forms.js';
 export * from './components/domain.js';
 
 export * from './map/types.js';

@@ -42,6 +42,9 @@ export * from './matching/scoring.js';
 export * from './matching/strategies.js';
 export * from './matching/dispatcher.js';
 
+// Support
+export * from './support/index.js';
+
 // Catalog & configuration
 export * from './catalog/rideTypes.js';
 export * from './config/platform.js';

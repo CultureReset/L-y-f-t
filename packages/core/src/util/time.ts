@@ -86,6 +86,33 @@ export const formatCountdown = (ms: Millis): string => {
 export const formatClockTime = (at: Millis, locale = 'en-US'): string =>
   new Date(at).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
 
+/**
+ * "3 min ago", "yesterday". Takes `now` rather than reading a clock, so it is
+ * pure and testable like everything else here.
+ */
+export const formatRelativeTime = (at: Millis, now: Millis): string => {
+  const delta = now - at;
+  if (delta < 0) return 'just now';
+  if (delta < MINUTE) return 'just now';
+  if (delta < HOUR) {
+    const mins = Math.floor(delta / MINUTE);
+    return `${mins} min ago`;
+  }
+  if (delta < DAY) {
+    const hrs = Math.floor(delta / HOUR);
+    return `${hrs} ${hrs === 1 ? 'hour' : 'hours'} ago`;
+  }
+  const days = Math.floor(delta / DAY);
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days} days ago`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) return `${weeks} ${weeks === 1 ? 'week' : 'weeks'} ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months} ${months === 1 ? 'month' : 'months'} ago`;
+  const years = Math.floor(days / 365);
+  return `${years} ${years === 1 ? 'year' : 'years'} ago`;
+};
+
 export const addMinutes = (at: Millis, mins: number): Millis => at + minutes(mins);
 
 /** Deadline helper used everywhere an offer or quote can expire. */

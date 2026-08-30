@@ -19,10 +19,13 @@ import type {
   PaymentMethod,
   Place,
   Position,
+  HelpTopic,
   Ride,
   RideOffer,
   RiderProfile,
   SavedPlace,
+  SupportTicket,
+  TicketCategory,
   User,
   Vehicle,
 } from '@lift/core';
@@ -330,4 +333,9 @@ export interface AdminDriverView {
   readonly totalRides: number;
   readonly acceptanceRate: number;
   readonly currentRideId?: string;
+}
+
+export interface HelpResponse {
+  readonly topics: readonly HelpTopic[];
+  readonly categories: readonly TicketCategory[];
 }

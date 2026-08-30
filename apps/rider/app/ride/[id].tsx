@@ -169,6 +169,36 @@ export default function RideScreen(): React.JSX.Element {
         <Badge label={statusLabel(ride.status)} tone="primary" />
       </View>
 
+      {/*
+        The safety shield is one tap from anywhere on a live ride. Burying it in
+        a menu defeats the point of having it.
+      */}
+      {ride.status === 'accepted' || ride.status === 'arrived' || ride.status === 'in_progress' ? (
+        <Pressable
+          onPress={() => router.push({ pathname: '/safety', params: { rideId: ride.id } })}
+          accessibilityRole="button"
+          accessibilityLabel="Safety tools"
+          hitSlop={10}
+          style={{
+            position: 'absolute',
+            top: insets.top + theme.spacing.sm,
+            right: theme.spacing.lg,
+            backgroundColor: theme.colors.surface,
+            borderRadius: theme.radius.pill,
+            paddingHorizontal: theme.spacing.lg,
+            paddingVertical: theme.spacing.sm,
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: theme.spacing.xs,
+          }}
+        >
+          <Text variant="body">🛡</Text>
+          <Text variant="captionStrong">Safety</Text>
+        </Pressable>
+      ) : null}
+
       <Sheet style={{ paddingBottom: insets.bottom + theme.spacing.lg, maxHeight: '72%' }}>
         <ScrollView showsVerticalScrollIndicator={false}>
           {ride.status === 'requested' ? (
@@ -382,6 +412,19 @@ const InProgressPanel = ({
         dropoff={ride.itinerary.dropoff.name}
         stops={ride.itinerary.stops.map((s) => s.place.name)}
       />
+
+      <Row gap="sm">
+        <Button
+          label="Safety"
+          variant="secondary"
+          onPress={() => router.push({ pathname: '/safety', params: { rideId: ride.id } })}
+        />
+        <Button
+          label="Get help"
+          variant="ghost"
+          onPress={() => router.push({ pathname: '/support', params: { rideId: ride.id } })}
+        />
+      </Row>
     </Column>
   );
 };

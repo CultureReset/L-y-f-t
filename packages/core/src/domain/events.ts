@@ -7,13 +7,14 @@
  * means editing the ride service.
  */
 
-import type { DriverId, OfferId, RideId, RiderId } from '../util/ids.js';
+import type { DriverId, OfferId, RideId, RiderId, TicketId, UserId } from '../util/ids.js';
 import type { Position } from '../util/geo.js';
 import type { Ride, RideStatus, Cancellation } from './ride.js';
 import type { RideOffer } from '../matching/types.js';
 import type { FareBreakdown } from '../pricing/types.js';
 import type { Charge } from './payment.js';
 import type { DriverAvailability } from './driver.js';
+import type { TicketAction, TicketPriority, TicketStatus } from '../support/tickets.js';
 
 export type PlatformEvents = {
   'ride.created': { ride: Ride };
@@ -64,6 +65,23 @@ export type PlatformEvents = {
     rideId: RideId;
     raisedBy: 'rider' | 'driver';
     kind: 'sos' | 'route_deviation' | 'long_stop';
+    at: number;
+  };
+
+  'support.ticket.opened': {
+    ticketId: TicketId;
+    requesterId: UserId;
+    category: string;
+    priority: TicketPriority;
+    rideId?: RideId;
+    at: number;
+  };
+  'support.ticket.updated': {
+    ticketId: TicketId;
+    requesterId: UserId;
+    status: TicketStatus;
+    by: 'requester' | 'support';
+    action: TicketAction;
     at: number;
   };
 

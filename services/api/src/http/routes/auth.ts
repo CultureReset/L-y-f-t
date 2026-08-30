@@ -110,6 +110,30 @@ export const registerAuthRoutes = (app: FastifyInstance, container: Container): 
     };
   });
 
+  /**
+   * Register this device for push. Both apps call it after sign-in and whenever
+   * the OS rotates the token — which it does, so this has to be idempotent.
+   */
+  app.post('/auth/device', async (request) => {
+    const actor = requireActor(request);
+    const { token } = parse(
+      z.object({ token: z.string().min(10).max(300) }),
+      request.body,
+    );
+    // A person may hold both profiles; register the token against whichever
+    // role this session is acting as.
+    const recipient =
+      actor.role === 'driver' && actor.driverId
+        ? { kind: 'driver' as const, id: actor.driverId }
+        : actor.riderId
+          ? { kind: 'rider' as const, id: actor.riderId }
+          : undefined;
+    if (!recipient) return { ok: false };
+
+    container.pushTokens.register(recipient, token);
+    return { ok: true };
+  });
+
   app.post('/auth/signout', async (request) => {
     const actor = requireActor(request);
     await container.auth.signOut(actor.token);

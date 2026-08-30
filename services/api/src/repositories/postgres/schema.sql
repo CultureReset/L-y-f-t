@@ -176,3 +176,18 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   read_at       BIGINT
 );
 CREATE INDEX IF NOT EXISTS chat_ride_idx ON chat_messages(ride_id, sent_at);
+
+CREATE TABLE IF NOT EXISTS support_tickets (
+  id            TEXT PRIMARY KEY,
+  doc           JSONB NOT NULL,
+  requester_id  TEXT GENERATED ALWAYS AS (doc->>'requesterId') STORED,
+  ride_id       TEXT GENERATED ALWAYS AS (doc->>'rideId') STORED,
+  status        TEXT GENERATED ALWAYS AS (doc->>'status') STORED,
+  priority      TEXT GENERATED ALWAYS AS (doc->>'priority') STORED,
+  updated_at    BIGINT GENERATED ALWAYS AS ((doc->>'updatedAt')::BIGINT) STORED
+);
+-- A person opening the support tab: their tickets, newest activity first.
+CREATE INDEX IF NOT EXISTS support_requester_idx ON support_tickets(requester_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS support_ride_idx ON support_tickets(ride_id);
+-- An agent working the queue: open tickets, highest priority first.
+CREATE INDEX IF NOT EXISTS support_queue_idx ON support_tickets(status, priority, updated_at DESC);

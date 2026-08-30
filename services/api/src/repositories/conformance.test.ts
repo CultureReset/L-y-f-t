@@ -27,6 +27,7 @@ import {
   newPlaceId,
   newRiderId,
   newSessionId,
+  newTicketId,
   newUserId,
   newVehicleId,
   destination,
@@ -35,6 +36,8 @@ import {
   type Position,
   type RiderId,
   type SessionId,
+  type SupportTicket,
+  type UserId,
 } from '@lift/core';
 import type { Repositories } from './types.js';
 import { createMemoryRepositories } from './memory/index.js';
@@ -662,6 +665,70 @@ for (const suite of suites) {
         // The driver read the rider's message, not their own.
         expect(afterRead.find((m) => m.from === 'rider')!.readAt).toBe(T0 + 2000);
         expect(afterRead.find((m) => m.from === 'driver')!.readAt).toBeUndefined();
+      });
+    });
+
+    describe('support tickets', () => {
+      const makeTicket = (overrides: Partial<SupportTicket> = {}): SupportTicket => ({
+        id: newTicketId(),
+        requesterId: newUserId(),
+        requesterRole: 'rider',
+        category: 'fare_dispute',
+        subject: 'My fare was higher than the estimate',
+        status: 'open',
+        priority: 'normal',
+        messages: [
+          { id: newMessageId(), from: 'requester', text: 'This cost more than quoted', sentAt: T0 },
+        ],
+        createdAt: T0,
+        updatedAt: T0,
+        ...overrides,
+      });
+
+      it('round-trips a ticket with its whole thread', async () => {
+        const ticket = makeTicket();
+        await repos.support.create(ticket);
+        expect(await repos.support.findById(ticket.id)).toEqual(ticket);
+      });
+
+      it('refuses a save whose guard is stale', async () => {
+        const ticket = await repos.support.create(makeTicket());
+        const replied = { ...ticket, status: 'awaiting_reply' as const, updatedAt: T0 + 1000 };
+        expect(await repos.support.save(replied, T0)).toEqual(replied);
+        // A second writer still holding the original updatedAt loses.
+        expect(await repos.support.save({ ...ticket, updatedAt: T0 + 2000 }, T0)).toBeUndefined();
+      });
+
+      it('filters by requester, ride, and status, newest activity first', async () => {
+        const requesterId = newUserId() as UserId;
+        const rideId = (await repos.rides.create(makeRide({ riderId: newRiderId() }))).id;
+        await repos.support.create(makeTicket({ requesterId, updatedAt: T0 }));
+        await repos.support.create(
+          makeTicket({ requesterId, rideId, status: 'resolved', updatedAt: T0 + 5000 }),
+        );
+        await repos.support.create(makeTicket({ updatedAt: T0 + 9000 }));
+
+        const mine = await repos.support.query({ requesterId });
+        expect(mine).toHaveLength(2);
+        expect(mine[0]!.updatedAt).toBe(T0 + 5000);
+
+        expect(await repos.support.query({ rideId })).toHaveLength(1);
+        expect(await repos.support.query({ statuses: ['resolved'] })).toHaveLength(1);
+        expect(await repos.support.query({ requesterId, limit: 1 })).toHaveLength(1);
+      });
+
+      it('counts the queue by status', async () => {
+        // The store is shared across this suite, so the assertion is on the
+        // delta rather than on absolute numbers.
+        const before = await repos.support.countByStatus();
+        await repos.support.create(makeTicket());
+        await repos.support.create(makeTicket());
+        await repos.support.create(makeTicket({ status: 'resolved' }));
+
+        const after = await repos.support.countByStatus();
+        expect(after.open! - (before.open ?? 0)).toBe(2);
+        expect(after.resolved! - (before.resolved ?? 0)).toBe(1);
+        expect(after.closed).toBeUndefined();
       });
     });
   });

@@ -20,6 +20,7 @@ import type {
   DriverStatusResponse,
   EarningsResponse,
   HealthResponse,
+  HelpResponse,
   MeResponse,
   PaymentMethodView,
   PlaceSearchResponse,
@@ -37,6 +38,7 @@ import type {
   Ride,
   RideOffer,
   SavedPlace,
+  SupportTicket,
   VehicleInput,
   Vehicle,
   DriverProfile,
@@ -351,10 +353,60 @@ export class LiftClient {
     return this.get('/v1/rides/quick-replies');
   }
 
+  // ------------------------------------------------------------- support
+
+  /**
+   * The help centre, narrowed for who is asking. Pass a ride to unlock the
+   * topics that only make sense mid-trip.
+   */
+  help(input: { audience?: 'rider' | 'driver'; rideId?: string } = {}): Promise<HelpResponse> {
+    const query = new URLSearchParams();
+    if (input.audience) query.set('audience', input.audience);
+    if (input.rideId) query.set('rideId', input.rideId);
+    const suffix = query.toString();
+    return this.get(`/v1/support/help${suffix ? `?${suffix}` : ''}`);
+  }
+
+  tickets(): Promise<{ tickets: SupportTicket[] }> {
+    return this.get('/v1/support/tickets');
+  }
+
+  ticket(ticketId: string): Promise<{ ticket: SupportTicket }> {
+    return this.get(`/v1/support/tickets/${ticketId}`);
+  }
+
+  openTicket(input: {
+    categoryId: string;
+    body: string;
+    subject?: string;
+    rideId?: string;
+  }): Promise<{ ticket: SupportTicket }> {
+    return this.post('/v1/support/tickets', input);
+  }
+
+  replyToTicket(ticketId: string, text: string): Promise<{ ticket: SupportTicket }> {
+    return this.post(`/v1/support/tickets/${ticketId}/messages`, { text });
+  }
+
+  markTicketRead(ticketId: string): Promise<{ ticket: SupportTicket }> {
+    return this.post(`/v1/support/tickets/${ticketId}/read`, {});
+  }
+
+  setTicketStatus(
+    ticketId: string,
+    action: 'close' | 'reopen',
+  ): Promise<{ ticket: SupportTicket }> {
+    return this.post(`/v1/support/tickets/${ticketId}/status`, { action });
+  }
+
   // -------------------------------------------------------------- rider
 
   riderProfile(): Promise<{ rider: RiderProfile }> {
     return this.get('/v1/rider/profile');
+  }
+
+  updateRiderPreferences(patch: Record<string, unknown>): Promise<{ rider: RiderProfile }> {
+    return this.patch('/v1/rider/preferences', patch);
   }
 
   savedPlaces(): Promise<SavedPlacesResponse> {

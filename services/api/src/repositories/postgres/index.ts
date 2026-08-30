@@ -38,6 +38,8 @@ import {
   type RiderId,
   type RiderProfile,
   type SavedPlace,
+  type SupportTicket,
+  type TicketId,
   type User,
   type UserId,
   type Vehicle,
@@ -57,6 +59,8 @@ import type {
   SessionRecord,
   SessionRepository,
   ShiftRepository,
+  SupportRepository,
+  TicketQuery,
   UserRepository,
   VehicleRepository,
   VerificationRecord,
@@ -830,6 +834,71 @@ class PgChatRepository implements ChatRepository {
   }
 }
 
+class PgSupportRepository implements SupportRepository {
+  constructor(private readonly pool: Pool) {}
+
+  async create(ticket: SupportTicket): Promise<SupportTicket> {
+    await this.pool.query('INSERT INTO support_tickets (id, doc) VALUES ($1,$2)', [
+      ticket.id,
+      JSON.stringify(ticket),
+    ]);
+    return ticket;
+  }
+
+  async findById(id: TicketId): Promise<SupportTicket | undefined> {
+    const { rows } = await this.pool.query('SELECT doc FROM support_tickets WHERE id = $1', [id]);
+    return rows[0] ? (rows[0].doc as SupportTicket) : undefined;
+  }
+
+  async save(ticket: SupportTicket, expectedUpdatedAt?: number): Promise<SupportTicket | undefined> {
+    // The guard lives in the WHERE clause so the database, not the process,
+    // decides who won.
+    const { rowCount } =
+      expectedUpdatedAt === undefined
+        ? await this.pool.query('UPDATE support_tickets SET doc = $2 WHERE id = $1', [
+            ticket.id,
+            JSON.stringify(ticket),
+          ])
+        : await this.pool.query(
+            'UPDATE support_tickets SET doc = $2 WHERE id = $1 AND updated_at = $3',
+            [ticket.id, JSON.stringify(ticket), expectedUpdatedAt],
+          );
+    return rowCount === 1 ? ticket : undefined;
+  }
+
+  async query(query: TicketQuery): Promise<SupportTicket[]> {
+    const where: string[] = [];
+    const values: unknown[] = [];
+    if (query.requesterId) {
+      values.push(query.requesterId);
+      where.push(`requester_id = $${values.length}`);
+    }
+    if (query.rideId) {
+      values.push(query.rideId);
+      where.push(`ride_id = $${values.length}`);
+    }
+    if (query.statuses?.length) {
+      values.push(query.statuses);
+      where.push(`status = ANY($${values.length}::text[])`);
+    }
+    values.push(query.limit ?? 100);
+    const { rows } = await this.pool.query(
+      `SELECT doc FROM support_tickets ${
+        where.length ? `WHERE ${where.join(' AND ')}` : ''
+      } ORDER BY updated_at DESC LIMIT $${values.length}`,
+      values,
+    );
+    return rows.map((r) => r.doc as SupportTicket);
+  }
+
+  async countByStatus(): Promise<Record<string, number>> {
+    const { rows } = await this.pool.query(
+      'SELECT status, COUNT(*)::int AS count FROM support_tickets GROUP BY status',
+    );
+    return Object.fromEntries(rows.map((r) => [r.status as string, r.count as number]));
+  }
+}
+
 // ------------------------------------------------------------------ mapping
 
 const toUser = (row: Record<string, unknown>): User => ({
@@ -921,6 +990,7 @@ export const createPostgresRepositories = async (
     paymentMethods: new PgPaymentMethodRepository(pool),
     charges: new PgChargeRepository(pool),
     chat: new PgChatRepository(pool),
+    support: new PgSupportRepository(pool),
     close: () => pool.end(),
   };
 };

@@ -30,6 +30,9 @@ import type {
   RiderProfile,
   SavedPlace,
   SessionId,
+  SupportTicket,
+  TicketId,
+  TicketStatus,
   User,
   UserId,
   Vehicle,
@@ -206,6 +209,28 @@ export interface ChatRepository {
   markRead(rideId: RideId, reader: 'rider' | 'driver', at: number): Promise<void>;
 }
 
+// ---------------------------------------------------------------- support
+
+export interface TicketQuery {
+  readonly requesterId?: UserId;
+  readonly statuses?: readonly TicketStatus[];
+  readonly rideId?: RideId;
+  readonly limit?: number;
+}
+
+export interface SupportRepository {
+  create(ticket: SupportTicket): Promise<SupportTicket>;
+  findById(id: TicketId): Promise<SupportTicket | undefined>;
+  /**
+   * Replace a ticket, guarded by its previous `updatedAt` — the same optimistic
+   * concurrency the ride store uses, because an agent replying while the
+   * requester replies is exactly as likely here.
+   */
+  save(ticket: SupportTicket, expectedUpdatedAt?: number): Promise<SupportTicket | undefined>;
+  query(query: TicketQuery): Promise<SupportTicket[]>;
+  countByStatus(): Promise<Record<string, number>>;
+}
+
 // ------------------------------------------------------------- the bundle
 
 /** Everything the services need to persist, in one injectable bundle. */
@@ -222,6 +247,7 @@ export interface Repositories {
   readonly paymentMethods: PaymentMethodRepository;
   readonly charges: ChargeRepository;
   readonly chat: ChatRepository;
+  readonly support: SupportRepository;
   /** Release connections; a no-op for the in-memory store. */
   close(): Promise<void>;
 }
