@@ -27,12 +27,13 @@
     "seed": "npm run seed -w @lift/api",
     "db:generate": "npm run db:generate -w @lift/api",
     "db:migrate": "npm run db:migrate -w @lift/api",
-    "api:clean": "SEED_ON_BOOT=false npm run api"
+    "api:clean": "SEED_ON_BOOT=false npm run api",
+    "brand": "python3 tools/brand/src/generate.py"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "@types/react": "~19.1.0",
-    "@types/react-dom": "^19.2.5",
+    "@types/react-dom": "~19.1.0",
     "concurrently": "^9.1.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
@@ -42,6 +43,8 @@
   "overrides": {
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "react-native": "0.81.4"
+    "react-native": "0.81.4",
+    "@types/react": "~19.1.0",
+    "@types/react-dom": "~19.1.0"
   }
 }

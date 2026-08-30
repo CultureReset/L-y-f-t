@@ -5,15 +5,19 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "scheme": "liftdriver",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
+      "image": "./assets/splash.png",
       "backgroundColor": "#0C0C0F",
       "resizeMode": "contain"
     },
     "android": {
       "package": "com.lift.driver",
-      "adaptiveIcon": { "backgroundColor": "#0C0C0F" },
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0C0C0F"
+      },
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -22,7 +26,13 @@
         "FOREGROUND_SERVICE_LOCATION",
         "WAKE_LOCK"
       ],
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "versionCode": 1,
+      "compileSdkVersion": 35,
+      "targetSdkVersion": 35,
+      "blockedPermissions": [
+        "com.google.android.gms.permission.AD_ID"
+      ]
     },
     "ios": {
       "bundleIdentifier": "com.lift.driver",
@@ -30,10 +40,17 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Your location is shared with riders while you are online so they can see you on the way.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Your location keeps updating while you are on a trip, even with the app in the background.",
-        "UIBackgroundModes": ["location"]
-      }
+        "UIBackgroundModes": [
+          "location"
+        ]
+      },
+      "buildNumber": "1"
     },
-    "web": { "bundler": "metro", "output": "single" },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png"
+    },
     "plugins": [
       "expo-router",
       [
@@ -44,6 +61,10 @@
         }
       ]
     ],
-    "experiments": { "typedRoutes": false }
+    "experiments": {
+      "typedRoutes": false
+    },
+    "icon": "./assets/icon.png",
+    "primaryColor": "#0C0C0F"
   }
 }

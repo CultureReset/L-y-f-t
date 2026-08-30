@@ -1,0 +1,9 @@
+{
+  "name": "@lift/brand",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Generates every icon, splash, and store graphic from one definition.",
+  "scripts": {
+    "generate": "python3 src/generate.py"
+  }
+}

@@ -352,8 +352,41 @@ npx expo run:android          # a local debug build
 npx eas build -p android      # a distributable build
 ```
 
+Or, with only the Android SDK and no Expo account:
+
+```bash
+cd apps/rider
+npx expo prebuild --platform android
+cd android && ./gradlew assembleDebug
+# app/build/outputs/apk/debug/app-debug.apk
+```
+
+The generated `android/` directory is derived from `app.json` and is not
+tracked — `expo prebuild` recreates it, and editing it by hand loses the change
+on the next run.
+
 Both apps also run on iOS and in a browser from the same source. Point them at a
 non-local backend with `EXPO_PUBLIC_API_URL`.
+
+### Icons and store assets
+
+Every icon, adaptive icon, splash, and Play Store graphic is generated from one
+definition:
+
+```bash
+python3 tools/brand/src/generate.py
+```
+
+Change a brand colour or the mark in `tools/brand/src/generate.py` and re-run
+it. No PNG in the repo is hand-edited.
+
+### Shipping to Google Play
+
+[`docs/RELEASING.md`](docs/RELEASING.md) covers the release process: signing,
+the `versionCode` bump that Play rejects an upload without, the justification
+for every permission each app requests, and the Data safety answers that match
+what the code actually does. Store copy and screenshot inventories are in
+[`docs/store/`](docs/store/).
 
 ---
 
@@ -397,6 +430,10 @@ The schema is applied at startup from `services/api/src/repositories/postgres/sc
 - [`docs/EXTENDING.md`](docs/EXTENDING.md) — recipes: a new place source, a new
   class of service, a new fare rule, a different mapping vendor, a real payment
   processor, a second market.
+- [`docs/RELEASING.md`](docs/RELEASING.md) — building, signing, permissions, and
+  the Play Store submission checklist.
+- [`docs/PRIVACY.md`](docs/PRIVACY.md) — a privacy policy describing what the
+  apps actually collect. A template to adapt, not legal advice.
 
 ## Licence
 
