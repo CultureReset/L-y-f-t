@@ -26,6 +26,7 @@ import {
   newPaymentMethodId,
   newPlaceId,
   newRiderId,
+  newPayoutId,
   newSessionId,
   newTicketId,
   newUserId,
@@ -36,6 +37,7 @@ import {
   type Position,
   type RiderId,
   type SessionId,
+  type Payout,
   type SupportTicket,
   type UserId,
 } from '@lift/core';
@@ -82,7 +84,8 @@ const suites: { name: string; create: () => Promise<Repositories> | Repositories
       const pg = await import('pg');
       const pool = new pg.default.Pool({ connectionString: process.env.TEST_DATABASE_URL! });
       await pool.query(
-        `TRUNCATE payouts, payout_destinations, support_tickets, promo_redemptions,
+        `TRUNCATE push_tokens, payouts, payout_destinations, support_tickets,
+                  promo_redemptions,
                   chat_messages, charges,
                   payment_methods, offers, rides, shifts, vehicles, drivers,
                   riders, verifications, sessions, users RESTART IDENTITY CASCADE`,
@@ -731,6 +734,193 @@ for (const suite of suites) {
         expect(after.open! - (before.open ?? 0)).toBe(2);
         expect(after.resolved! - (before.resolved ?? 0)).toBe(1);
         expect(after.closed).toBeUndefined();
+      });
+    });
+
+    describe('payouts', () => {
+      const makePayout = (driverId: DriverProfile['id'], overrides: Partial<Payout> = {}): Payout => ({
+        id: newPayoutId(),
+        driverId,
+        kind: 'instant',
+        amount: fromDecimal(49.5),
+        fee: fromDecimal(0.5),
+        status: 'pending',
+        requestedAt: T0,
+        destinationLabel: 'Chase ••••4321',
+        ...overrides,
+      });
+
+      it('round-trips a payout and updates its status', async () => {
+        const driver = await driverNorthOfFerry(repos, 100);
+        const payout = await repos.payouts.create(makePayout(driver.id));
+
+        expect(await repos.payouts.findById(payout.id)).toEqual(payout);
+
+        const paid = await repos.payouts.update(payout.id, {
+          status: 'paid',
+          settledAt: T0 + 60_000,
+        });
+        expect(paid.status).toBe('paid');
+        expect((await repos.payouts.findById(payout.id))?.settledAt).toBe(T0 + 60_000);
+      });
+
+      it('lists a driver’s payouts newest first, and nobody else’s', async () => {
+        const mine = await driverNorthOfFerry(repos, 100);
+        const theirs = await driverNorthOfFerry(repos, 200);
+        await repos.payouts.create(makePayout(mine.id, { requestedAt: T0 }));
+        await repos.payouts.create(makePayout(mine.id, { requestedAt: T0 + 5000 }));
+        await repos.payouts.create(makePayout(theirs.id));
+
+        const list = await repos.payouts.listForDriver(mine.id);
+        expect(list).toHaveLength(2);
+        expect(list[0]!.requestedAt).toBe(T0 + 5000);
+        expect(await repos.payouts.listForDriver(mine.id, 1)).toHaveLength(1);
+      });
+
+      it('counts instant cash outs from a moment, inclusive', async () => {
+        const driver = await driverNorthOfFerry(repos, 100);
+        await repos.payouts.create(makePayout(driver.id, { requestedAt: T0 - 1 }));
+        await repos.payouts.create(makePayout(driver.id, { requestedAt: T0 }));
+        await repos.payouts.create(
+          makePayout(driver.id, { kind: 'scheduled', requestedAt: T0 + 1000 }),
+        );
+
+        // The boundary itself counts, and a scheduled payout is not an instant.
+        expect(await repos.payouts.countInstantSince(driver.id, T0)).toBe(1);
+        expect(await repos.payouts.countInstantSince(driver.id, T0 - 1)).toBe(2);
+      });
+
+      it('commits the amount and the fee, and releases a failed payout', async () => {
+        const driver = await driverNorthOfFerry(repos, 100);
+        expect(await repos.payouts.totalCommitted(driver.id)).toBe(0);
+
+        await repos.payouts.create(makePayout(driver.id));
+        // 4950 to the driver plus a 50 fee, both out of the balance.
+        expect(await repos.payouts.totalCommitted(driver.id)).toBe(5000);
+
+        const failed = await repos.payouts.create(
+          makePayout(driver.id, { amount: fromDecimal(10), fee: fromDecimal(0) }),
+        );
+        expect(await repos.payouts.totalCommitted(driver.id)).toBe(6000);
+
+        // A payout that failed never left, so the money is available again.
+        await repos.payouts.update(failed.id, { status: 'failed' });
+        expect(await repos.payouts.totalCommitted(driver.id)).toBe(5000);
+      });
+
+      it('keeps at most one default destination per driver', async () => {
+        const driver = await driverNorthOfFerry(repos, 100);
+        const base = { driverId: driver.id, createdAt: T0 };
+
+        await repos.payouts.addDestination({
+          ...base,
+          id: 'pod_1',
+          label: 'Chase ••••4321',
+          isDefault: true,
+        });
+        await repos.payouts.addDestination({
+          ...base,
+          id: 'pod_2',
+          label: 'Ally ••••9876',
+          isDefault: true,
+        });
+
+        const destinations = await repos.payouts.listDestinations(driver.id);
+        expect(destinations).toHaveLength(2);
+        expect(destinations.filter((d) => d.isDefault).map((d) => d.id)).toEqual(['pod_2']);
+
+        await repos.payouts.removeDestination('pod_1');
+        expect(await repos.payouts.listDestinations(driver.id)).toHaveLength(1);
+      });
+    });
+
+    describe('promo redemptions', () => {
+      it('counts per rider and across everyone, scoped to the code', async () => {
+        const riderA = newRiderId();
+        const riderB = newRiderId();
+        const code = `SAVE${Date.now()}`;
+
+        await repos.promos.record({ code, riderId: riderA, redeemedAt: T0 });
+        await repos.promos.record({ code, riderId: riderA, redeemedAt: T0 + 1000 });
+        await repos.promos.record({ code, riderId: riderB, redeemedAt: T0 + 2000 });
+        await repos.promos.record({ code: `${code}X`, riderId: riderA, redeemedAt: T0 });
+
+        expect(await repos.promos.countForRider(code, riderA)).toBe(2);
+        expect(await repos.promos.countForRider(code, riderB)).toBe(1);
+        expect(await repos.promos.countTotal(code)).toBe(3);
+        // An unused code has no redemptions rather than an error.
+        expect(await repos.promos.countTotal('NEVER_USED')).toBe(0);
+      });
+
+      it('records the ride a code was used on, when there is one', async () => {
+        const riderId = newRiderId();
+        const rideId = (await repos.rides.create(makeRide({ riderId }))).id;
+        const code = `TRIP${Date.now()}`;
+
+        await repos.promos.record({ code, riderId, rideId, redeemedAt: T0 });
+        await repos.promos.record({ code: `${code}B`, riderId, redeemedAt: T0 + 1000 });
+
+        const history = await repos.promos.listForRider(riderId);
+        expect(history).toHaveLength(2);
+        expect(history.find((r) => r.code === code)?.rideId).toBe(rideId);
+        // A code redeemed outside a ride carries no ride id at all.
+        expect(history.find((r) => r.code === `${code}B`)?.rideId).toBeUndefined();
+      });
+    });
+
+    describe('push tokens', () => {
+      it('files a device under a recipient and reads it back', async () => {
+        const riderId = newRiderId();
+        await repos.pushTokens.register({ kind: 'rider', id: riderId }, 'tok_phone', T0);
+        await repos.pushTokens.register({ kind: 'rider', id: riderId }, 'tok_tablet', T0 + 1);
+
+        expect(await repos.pushTokens.tokensFor({ kind: 'rider', id: riderId })).toEqual([
+          'tok_phone',
+          'tok_tablet',
+        ]);
+      });
+
+      it('is idempotent: the apps register on every launch', async () => {
+        const riderId = newRiderId();
+        await repos.pushTokens.register({ kind: 'rider', id: riderId }, 'tok_same', T0);
+        await repos.pushTokens.register({ kind: 'rider', id: riderId }, 'tok_same', T0 + 5000);
+
+        expect(await repos.pushTokens.tokensFor({ kind: 'rider', id: riderId })).toEqual([
+          'tok_same',
+        ]);
+      });
+
+      it('keeps the two roles on one device apart', async () => {
+        const riderId = newRiderId();
+        const driverId = newDriverId();
+        await repos.pushTokens.register({ kind: 'rider', id: riderId }, 'tok_shared', T0);
+        await repos.pushTokens.register({ kind: 'driver', id: driverId }, 'tok_shared', T0);
+
+        expect(await repos.pushTokens.tokensFor({ kind: 'rider', id: riderId })).toEqual([
+          'tok_shared',
+        ]);
+        expect(await repos.pushTokens.tokensFor({ kind: 'driver', id: driverId })).toEqual([
+          'tok_shared',
+        ]);
+      });
+
+      it('removes an uninstalled device from every role it was filed under', async () => {
+        const riderId = newRiderId();
+        const driverId = newDriverId();
+        await repos.pushTokens.register({ kind: 'rider', id: riderId }, 'tok_gone', T0);
+        await repos.pushTokens.register({ kind: 'driver', id: driverId }, 'tok_gone', T0);
+        await repos.pushTokens.register({ kind: 'rider', id: riderId }, 'tok_kept', T0);
+
+        await repos.pushTokens.remove('tok_gone');
+
+        expect(await repos.pushTokens.tokensFor({ kind: 'rider', id: riderId })).toEqual([
+          'tok_kept',
+        ]);
+        expect(await repos.pushTokens.tokensFor({ kind: 'driver', id: driverId })).toEqual([]);
+      });
+
+      it('has nothing for someone who never registered', async () => {
+        expect(await repos.pushTokens.tokensFor({ kind: 'rider', id: newRiderId() })).toEqual([]);
       });
     });
   });

@@ -435,6 +435,15 @@ export class LiftClient {
     return this.get('/v1/rider/promos/history');
   }
 
+  /**
+   * Register this device for push. Called after sign-in and whenever the
+   * platform rotates the token — the backend deduplicates, so calling it more
+   * often than necessary is harmless.
+   */
+  registerDevice(token: string): Promise<{ ok: boolean }> {
+    return this.post('/v1/auth/device', { token });
+  }
+
   // ------------------------------------------------------------- support
 
   /**

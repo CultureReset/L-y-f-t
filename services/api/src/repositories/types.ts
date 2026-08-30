@@ -211,6 +211,29 @@ export interface ChatRepository {
   markRead(rideId: RideId, reader: 'rider' | 'driver', at: number): Promise<void>;
 }
 
+// ---------------------------------------------------------- push tokens
+
+/**
+ * Device tokens for push.
+ *
+ * A repository like any other, because a memory-only store would silently drop
+ * every registered device on a deploy — and the first anyone would know is
+ * that notifications stopped.
+ */
+export interface PushRecipient {
+  readonly kind: 'rider' | 'driver';
+  readonly id: RiderId | DriverId;
+}
+
+export interface PushTokenRepository {
+  register(recipient: PushRecipient, token: string, at: number): Promise<void>;
+  tokensFor(recipient: PushRecipient): Promise<string[]>;
+  /** Called when the push service reports a token as gone. */
+  remove(token: string): Promise<void>;
+  /** Every token registered, for a count or an audit. */
+  size(): Promise<number>;
+}
+
 // --------------------------------------------------------------- payouts
 
 /** Where a driver's money goes. Tokenised by the gateway, never a raw account. */
@@ -290,6 +313,7 @@ export interface Repositories {
   readonly paymentMethods: PaymentMethodRepository;
   readonly charges: ChargeRepository;
   readonly chat: ChatRepository;
+  readonly pushTokens: PushTokenRepository;
   readonly payouts: PayoutRepository;
   readonly promos: PromoRepository;
   readonly support: SupportRepository;

@@ -56,6 +56,8 @@ import type {
   PaymentMethodRepository,
   PayoutDestination,
   PayoutRepository,
+  PushRecipient,
+  PushTokenRepository,
   PromoRepository,
   Repositories,
   RideQuery,
@@ -839,6 +841,41 @@ class PgChatRepository implements ChatRepository {
   }
 }
 
+class PgPushTokenRepository implements PushTokenRepository {
+  constructor(private readonly pool: Pool) {}
+
+  async register(recipient: PushRecipient, token: string, at: number): Promise<void> {
+    // Re-registering the same device refreshes when it was last seen rather
+    // than failing — the apps call this on every launch.
+    await this.pool.query(
+      `INSERT INTO push_tokens (token, recipient_kind, recipient_id, registered_at)
+       VALUES ($1,$2,$3,$4)
+       ON CONFLICT (token, recipient_kind, recipient_id)
+       DO UPDATE SET registered_at = EXCLUDED.registered_at`,
+      [token, recipient.kind, recipient.id, at],
+    );
+  }
+
+  async tokensFor(recipient: PushRecipient): Promise<string[]> {
+    const { rows } = await this.pool.query(
+      `SELECT token FROM push_tokens
+        WHERE recipient_kind = $1 AND recipient_id = $2
+        ORDER BY registered_at`,
+      [recipient.kind, recipient.id],
+    );
+    return rows.map((r) => r.token as string);
+  }
+
+  async remove(token: string): Promise<void> {
+    await this.pool.query('DELETE FROM push_tokens WHERE token = $1', [token]);
+  }
+
+  async size(): Promise<number> {
+    const { rows } = await this.pool.query('SELECT COUNT(*)::int AS count FROM push_tokens');
+    return (rows[0]?.count as number) ?? 0;
+  }
+}
+
 class PgPayoutRepository implements PayoutRepository {
   constructor(private readonly pool: Pool) {}
 
@@ -1133,6 +1170,7 @@ export const createPostgresRepositories = async (
     paymentMethods: new PgPaymentMethodRepository(pool),
     charges: new PgChargeRepository(pool),
     chat: new PgChatRepository(pool),
+    pushTokens: new PgPushTokenRepository(pool),
     payouts: new PgPayoutRepository(pool),
     promos: new PgPromoRepository(pool),
     support: new PgSupportRepository(pool),

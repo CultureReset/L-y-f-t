@@ -130,7 +130,7 @@ export const registerAuthRoutes = (app: FastifyInstance, container: Container): 
           : undefined;
     if (!recipient) return { ok: false };
 
-    container.pushTokens.register(recipient, token);
+    await container.pushTokens.register(recipient, token, container.clock.now());
     return { ok: true };
   });
 

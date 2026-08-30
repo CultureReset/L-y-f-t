@@ -24,7 +24,9 @@
         "ACCESS_BACKGROUND_LOCATION",
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_LOCATION",
-        "WAKE_LOCK"
+        "WAKE_LOCK",
+        "POST_NOTIFICATIONS",
+        "VIBRATE"
       ],
       "edgeToEdgeEnabled": true,
       "versionCode": 1,
@@ -58,6 +60,14 @@
         {
           "locationWhenInUsePermission": "Your location is shared with riders while you are online.",
           "isAndroidBackgroundLocationEnabled": true
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/adaptive-icon.png",
+          "color": "#0C0C0F",
+          "defaultChannel": "default"
         }
       ]
     ],

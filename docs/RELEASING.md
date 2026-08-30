@@ -72,6 +72,8 @@ tied to a specific screen rather than a general claim.
 | `ACCESS_FINE_LOCATION` | Sets the pickup point on the confirm screen and shows the driver approaching on the live ride screen. |
 | `ACCESS_COARSE_LOCATION` | Fallback when the rider denies precise location; the pickup can still be set approximately and corrected by hand. |
 | `FOREGROUND_SERVICE` | Keeps the ride's realtime connection alive while the trip is in progress and the app is backgrounded. |
+| `POST_NOTIFICATIONS` | "Your driver is arriving", trip updates, and receipts. Asked for after sign-in, not on first launch. |
+| `VIBRATE` | The alert pattern for an arriving driver. |
 
 The rider app requests **no background location**. A rider's location matters
 only while the app is open.
@@ -84,6 +86,8 @@ only while the app is open.
 | `ACCESS_BACKGROUND_LOCATION` | A driver's phone is mounted and the screen sleeps. Without it, a trip in progress stops updating the rider entirely. **Play requires a video demonstrating this**; record the drive screen going to background mid-trip while the rider app keeps tracking. |
 | `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_LOCATION` | The persistent notification that makes background location lawful and visible. |
 | `WAKE_LOCK` | Keeps the offer countdown running when an offer arrives on a sleeping device. |
+| `POST_NOTIFICATIONS` | Ride offers, which are the product. Asked for after sign-in. |
+| `VIBRATE` | The alert pattern for an incoming offer. |
 
 ## Data safety declarations
 
@@ -102,6 +106,10 @@ row stops being true, the code changed and the form needs revisiting.
 | Photos | Yes (driver documents) | No | Account management, safety | No |
 | Crash logs | No | No | — | — |
 | Advertising ID | No | No | — | — |
+
+Push tokens are device identifiers, not personal data, and are declared under
+**Device or other IDs → collected, not shared**. They are pruned the moment
+Expo reports a device as unregistered.
 
 Both apps encrypt data in transit and offer account deletion in-app
 (rider: Help → Account → Deleting your account).

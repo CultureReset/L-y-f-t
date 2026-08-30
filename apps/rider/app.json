@@ -21,7 +21,9 @@
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
-        "FOREGROUND_SERVICE"
+        "FOREGROUND_SERVICE",
+        "POST_NOTIFICATIONS",
+        "VIBRATE"
       ],
       "edgeToEdgeEnabled": true,
       "versionCode": 1,
@@ -50,6 +52,14 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "We use your location to set your pickup point and show your driver on the way."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/adaptive-icon.png",
+          "color": "#8B2FD6",
+          "defaultChannel": "default"
         }
       ]
     ],

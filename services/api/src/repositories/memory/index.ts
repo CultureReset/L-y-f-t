@@ -56,6 +56,8 @@ import type {
   PaymentMethodRepository,
   PayoutDestination,
   PayoutRepository,
+  PushRecipient,
+  PushTokenRepository,
   PromoRepository,
   Repositories,
   RideQuery,
@@ -625,6 +627,37 @@ class MemoryChatRepository implements ChatRepository {
  * codes, pending offers — must agree with whatever clock the rest of the
  * platform is running on, including a hand-driven one in tests.
  */
+class MemoryPushTokenRepository implements PushTokenRepository {
+  private readonly byRecipient = new Map<string, Set<string>>();
+
+  private key(recipient: PushRecipient): string {
+    return `${recipient.kind}:${recipient.id}`;
+  }
+
+  async register(recipient: PushRecipient, token: string): Promise<void> {
+    const key = this.key(recipient);
+    const tokens = this.byRecipient.get(key) ?? new Set<string>();
+    tokens.add(token);
+    this.byRecipient.set(key, tokens);
+  }
+
+  async tokensFor(recipient: PushRecipient): Promise<string[]> {
+    return [...(this.byRecipient.get(this.key(recipient)) ?? [])];
+  }
+
+  async remove(token: string): Promise<void> {
+    // A device is removed wherever it appears: an uninstalled app is gone for
+    // every role the person holds on it.
+    for (const tokens of this.byRecipient.values()) tokens.delete(token);
+  }
+
+  async size(): Promise<number> {
+    let total = 0;
+    for (const tokens of this.byRecipient.values()) total += tokens.size;
+    return total;
+  }
+}
+
 class MemoryPayoutRepository implements PayoutRepository {
   private readonly byId = new Map<string, Payout>();
   private readonly destinations = new Map<string, PayoutDestination>();
@@ -769,6 +802,7 @@ export const createMemoryRepositories = (clock: Clock = systemClock): Repositori
     paymentMethods: new MemoryPaymentMethodRepository(),
     charges,
     chat: new MemoryChatRepository(),
+    pushTokens: new MemoryPushTokenRepository(),
     payouts: new MemoryPayoutRepository(),
     promos: new MemoryPromoRepository(),
     support: new MemorySupportRepository(),

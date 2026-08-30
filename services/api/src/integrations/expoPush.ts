@@ -18,44 +18,18 @@
 
 import type { DriverId, RiderId } from '@lift/core';
 import type { PushMessage, PushTransport } from '../services/notificationService.js';
+import type { PushTokenRepository } from '../repositories/types.js';
 
 const EXPO_PUSH_API = 'https://exp.host/--/api/v2/push/send';
 
-/** Where device tokens live. Back it with whichever store you already have. */
-export interface PushTokenStore {
-  tokensFor(recipient: { kind: 'rider' | 'driver'; id: RiderId | DriverId }): Promise<string[]>;
-  /** Called when a token is rejected as no longer registered. */
-  remove(token: string): Promise<void>;
-}
-
-/** An in-memory store, so the push path is exercisable without a database. */
-export const createMemoryTokenStore = (): PushTokenStore & {
-  register(recipient: { kind: 'rider' | 'driver'; id: string }, token: string): void;
-  size(): number;
-} => {
-  const byRecipient = new Map<string, Set<string>>();
-  const key = (kind: string, id: string): string => `${kind}:${id}`;
-
-  return {
-    register(recipient, token) {
-      const k = key(recipient.kind, recipient.id);
-      const tokens = byRecipient.get(k) ?? new Set();
-      tokens.add(token);
-      byRecipient.set(k, tokens);
-    },
-    async tokensFor(recipient) {
-      return [...(byRecipient.get(key(recipient.kind, recipient.id)) ?? [])];
-    },
-    async remove(token) {
-      for (const tokens of byRecipient.values()) tokens.delete(token);
-    },
-    size() {
-      let total = 0;
-      for (const tokens of byRecipient.values()) total += tokens.size;
-      return total;
-    },
-  };
-};
+/**
+ * Where device tokens live.
+ *
+ * The narrow slice of `PushTokenRepository` this adapter needs, so a caller
+ * can hand it any store — the platform hands it the one backed by whichever
+ * database is configured, which is what stops a deploy wiping every device.
+ */
+export type PushTokenStore = Pick<PushTokenRepository, 'tokensFor' | 'remove'>;
 
 export interface ExpoPushOptions {
   readonly tokens: PushTokenStore;
@@ -81,7 +55,7 @@ export const createExpoPushTransport = (options: ExpoPushOptions): PushTransport
     id: 'expo',
 
     async send(message: PushMessage): Promise<void> {
-      const tokens = await options.tokens.tokensFor(message.to);
+      const tokens = await options.tokens.tokensFor(message.to as never);
       // No device registered yet is normal, not an error.
       if (tokens.length === 0) return;
 

@@ -28,6 +28,7 @@ import {
   type DriverStatusResponse,
   type MeResponse,
 } from '@lift/sdk';
+import { usePushNotifications } from '../push.js';
 import type { LatLng, Ride, RideOffer } from '@lift/core';
 
 const TOKEN_KEY = 'lift.driver.token';
@@ -148,6 +149,10 @@ export const DriverProvider = ({ children }: { children: ReactNode }): React.JSX
   }, [client, apiUrl, refresh]);
 
   const signedIn = me?.user !== undefined && me?.user !== null;
+
+  // Registers this device once the session exists, and routes a tap on a
+  // notification to whatever screen it names.
+  usePushNotifications(client, signedIn);
   const driverId = me?.driver?.id;
   // Anything but `offline` means the driver is working: available, holding an
   // offer, on a trip, or soft-paused. Treating `offered` as offline made the

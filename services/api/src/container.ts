@@ -54,7 +54,7 @@ import { createPostgresRepositories } from './repositories/postgres/index.js';
 import { AuthService, consoleCodeSender, type CodeSender } from './services/authService.js';
 import { createStripeGateway } from './integrations/stripeGateway.js';
 import { createTwilioSender } from './integrations/twilioSender.js';
-import { createExpoPushTransport, createMemoryTokenStore } from './integrations/expoPush.js';
+import { createExpoPushTransport } from './integrations/expoPush.js';
 import { PricingService } from './services/pricingService.js';
 import { PaymentService, createMemoryGateway } from './services/paymentService.js';
 import { DispatchRuntime } from './services/dispatchRuntime.js';
@@ -140,7 +140,7 @@ export interface Container {
   readonly support: SupportService;
   readonly notifications: NotificationService;
   /** Device tokens for push, so the apps can register on launch. */
-  readonly pushTokens: ReturnType<typeof createMemoryTokenStore>;
+  readonly pushTokens: Repositories['pushTokens'];
   readonly logger: Logger;
   /** Start background loops: dispatch, realtime, notifications, scheduler. */
   start(): void;
@@ -203,9 +203,10 @@ export const createContainer = async (
     },
   );
 
-  // Device tokens live here so both the push transport and the route that
-  // registers a device share one store.
-  const pushTokens = createMemoryTokenStore();
+  // Both the push transport and the route that registers a device read the
+  // same store, and it is the configured one — a memory-only token store
+  // would drop every registered device on a deploy.
+  const pushTokens = repositories.pushTokens;
 
   const hub = new RealtimeHub(events, {
     heartbeatIntervalMs: config.realtime.heartbeatIntervalMs,
@@ -473,7 +474,7 @@ const buildCodeSender = (config: PlatformConfig, logger: Logger): CodeSender => 
 /** Push notifications: logged in development, delivered through Expo otherwise. */
 const buildPushTransport = (
   config: PlatformConfig,
-  tokens: ReturnType<typeof createMemoryTokenStore>,
+  tokens: Repositories['pushTokens'],
   logger: Logger,
 ): PushTransport => {
   switch (config.notifications.pushProvider) {

@@ -11,7 +11,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { fromDecimal, type RiderId } from '@lift/core';
 import { createStripeGateway } from './stripeGateway.js';
 import { createTwilioSender } from './twilioSender.js';
-import { createExpoPushTransport, createMemoryTokenStore } from './expoPush.js';
+import { createExpoPushTransport } from './expoPush.js';
+import { createMemoryRepositories } from '../repositories/memory/index.js';
 
 /** A fetch that returns a canned response and records what it was called with. */
 const fakeFetch = (
@@ -221,9 +222,9 @@ describe('Expo push transport', () => {
   };
 
   it('sends to every device a person has registered', async () => {
-    const tokens = createMemoryTokenStore();
-    tokens.register({ kind: 'driver', id: 'drv_1' }, 'ExponentPushToken[phone]');
-    tokens.register({ kind: 'driver', id: 'drv_1' }, 'ExponentPushToken[tablet]');
+    const tokens = createMemoryRepositories().pushTokens;
+    await tokens.register({ kind: 'driver', id: 'drv_1' as never }, 'ExponentPushToken[phone]', 0);
+    await tokens.register({ kind: 'driver', id: 'drv_1' as never }, 'ExponentPushToken[tablet]', 0);
 
     const doFetch = fakeFetch({ body: { data: [{ status: 'ok' }, { status: 'ok' }] } });
     const transport = createExpoPushTransport({ tokens, fetch: doFetch });
@@ -237,8 +238,8 @@ describe('Expo push transport', () => {
   });
 
   it('marks an urgent message high priority with a short TTL', async () => {
-    const tokens = createMemoryTokenStore();
-    tokens.register({ kind: 'driver', id: 'drv_1' }, 'ExponentPushToken[x]');
+    const tokens = createMemoryRepositories().pushTokens;
+    await tokens.register({ kind: 'driver', id: 'drv_1' as never }, 'ExponentPushToken[x]', 0);
     const doFetch = fakeFetch({ body: { data: [{ status: 'ok' }] } });
     const transport = createExpoPushTransport({ tokens, fetch: doFetch });
 
@@ -251,8 +252,8 @@ describe('Expo push transport', () => {
   });
 
   it('prunes a token whose app has been uninstalled', async () => {
-    const tokens = createMemoryTokenStore();
-    tokens.register({ kind: 'driver', id: 'drv_1' }, 'ExponentPushToken[gone]');
+    const tokens = createMemoryRepositories().pushTokens;
+    await tokens.register({ kind: 'driver', id: 'drv_1' as never }, 'ExponentPushToken[gone]', 0);
     const doFetch = fakeFetch({
       body: { data: [{ status: 'error', details: { error: 'DeviceNotRegistered' } }] },
     });
@@ -261,12 +262,12 @@ describe('Expo push transport', () => {
     await transport.send(message);
 
     // Otherwise it is retried on every notification, forever.
-    expect(tokens.size()).toBe(0);
+    expect(await tokens.size()).toBe(0);
   });
 
   it('keeps a token that failed for a transient reason', async () => {
-    const tokens = createMemoryTokenStore();
-    tokens.register({ kind: 'driver', id: 'drv_1' }, 'ExponentPushToken[ok]');
+    const tokens = createMemoryRepositories().pushTokens;
+    await tokens.register({ kind: 'driver', id: 'drv_1' as never }, 'ExponentPushToken[ok]', 0);
     const doFetch = fakeFetch({
       body: { data: [{ status: 'error', details: { error: 'MessageRateExceeded' } }] },
     });
@@ -277,13 +278,13 @@ describe('Expo push transport', () => {
     });
 
     await transport.send(message);
-    expect(tokens.size()).toBe(1);
+    expect(await tokens.size()).toBe(1);
   });
 
   it('does nothing when nobody has registered a device', async () => {
     const doFetch = fakeFetch({ body: { data: [] } });
     const transport = createExpoPushTransport({
-      tokens: createMemoryTokenStore(),
+      tokens: createMemoryRepositories().pushTokens,
       fetch: doFetch,
     });
 

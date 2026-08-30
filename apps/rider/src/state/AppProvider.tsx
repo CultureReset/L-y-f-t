@@ -19,6 +19,7 @@ import React, {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { LiftClient, RealtimeClient, type ClientConfig, type MeResponse } from '@lift/sdk';
+import { usePushNotifications } from '../push.js';
 
 const TOKEN_KEY = 'lift.rider.token';
 
@@ -129,6 +130,10 @@ export const AppProvider = ({ children }: { children: ReactNode }): React.JSX.El
   }, [client, apiUrl, loadMe]);
 
   const signedIn = me?.user !== undefined && me?.user !== null;
+
+  // Registers this device once the session exists, and routes a tap on a
+  // notification to whatever screen it names.
+  usePushNotifications(client, signedIn);
 
   // The socket follows the session: connected while signed in, closed after.
   useEffect(() => {

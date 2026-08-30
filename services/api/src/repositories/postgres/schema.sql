@@ -229,3 +229,15 @@ CREATE INDEX IF NOT EXISTS payout_destinations_driver_idx ON payout_destinations
 -- A driver has at most one default destination.
 CREATE UNIQUE INDEX IF NOT EXISTS payout_destinations_one_default_idx
   ON payout_destinations(driver_id) WHERE is_default;
+
+CREATE TABLE IF NOT EXISTS push_tokens (
+  token           TEXT NOT NULL,
+  recipient_kind  TEXT NOT NULL,
+  recipient_id    TEXT NOT NULL,
+  registered_at   BIGINT NOT NULL,
+  PRIMARY KEY (token, recipient_kind, recipient_id)
+);
+CREATE INDEX IF NOT EXISTS push_tokens_recipient_idx
+  ON push_tokens(recipient_kind, recipient_id);
+-- An uninstalled app is removed by token, across every role it was filed under.
+CREATE INDEX IF NOT EXISTS push_tokens_token_idx ON push_tokens(token);
