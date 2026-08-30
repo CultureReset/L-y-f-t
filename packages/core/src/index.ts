@@ -23,6 +23,7 @@ export * from './domain/vehicle.js';
 export * from './domain/driver.js';
 export * from './domain/ride.js';
 export * from './domain/payment.js';
+export * from './domain/card.js';
 export * from './domain/events.js';
 
 // Ride lifecycle
@@ -41,6 +42,9 @@ export * from './matching/types.js';
 export * from './matching/scoring.js';
 export * from './matching/strategies.js';
 export * from './matching/dispatcher.js';
+
+// Promotions
+export * from './promos/index.js';
 
 // Support
 export * from './support/index.js';

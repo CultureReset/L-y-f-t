@@ -5,6 +5,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
+  AppError,
   paymentMethodLabel,
   paymentMethodSchema,
   placeSchema,
@@ -130,6 +131,34 @@ export const registerRiderRoutes = (app: FastifyInstance, container: Container):
     );
     const charges = await container.repositories.charges.listForRider(riderId, limit);
     return { charges };
+  });
+
+  // ------------------------------------------------------------- promo codes
+
+  /** The codes this rider can still use, with what is left on each. */
+  app.get('/rider/promos', async (request) => {
+    const riderId = requireRider(request);
+    if (!container.config.features.promoCodes) return { promos: [] };
+    return { promos: await container.promos.walletFor(riderId) };
+  });
+
+  /**
+   * Check a code without consuming it. The confirm screen calls this as the
+   * rider types, so it has to be safe to call repeatedly.
+   */
+  app.post('/rider/promos/check', async (request) => {
+    const riderId = requireRider(request);
+    const body = parse(z.object({ code: z.string().min(1).max(40) }), request.body);
+    if (!container.config.features.promoCodes) {
+      throw new AppError('validation_failed', 'Promo codes are not enabled in this market');
+    }
+    return { promo: await container.promos.validate({ code: body.code, riderId }) };
+  });
+
+  /** Every code this rider has already used. */
+  app.get('/rider/promos/history', async (request) => {
+    const riderId = requireRider(request);
+    return { redemptions: await container.repositories.promos.listForRider(riderId) };
   });
 };
 

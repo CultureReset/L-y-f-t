@@ -1167,3 +1167,114 @@ describe('payments', () => {
     expect(held!.status).toBe('authorized');
   });
 });
+
+describe('scheduled rides', () => {
+  it('are listed soonest first and kept out of history until they happen', async () => {
+    const { token } = await signIn(harness, '+14155551400');
+    const rider = asUser(harness, token);
+    const later = harness.clock.now() + 3 * 60 * 60_000;
+    const sooner = harness.clock.now() + 60 * 60_000;
+
+    for (const at of [later, sooner]) {
+      const response = await rider.post('/v1/rides', {
+        rideTypeId: 'standard',
+        pickup: FERRY_BUILDING,
+        dropoff: DOLORES_PARK,
+        passengerCount: 1,
+        scheduledFor: at,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().ride.status).toBe('scheduled');
+    }
+
+    const scheduled = (await rider.get('/v1/rides/scheduled')).json().rides;
+    expect(scheduled).toHaveLength(2);
+    expect(scheduled[0].scheduledFor).toBe(sooner);
+
+    // History is finished trips; a booking for later is not one.
+    expect((await rider.get('/v1/rides/history')).json().rides).toHaveLength(0);
+  });
+
+  it('can be cancelled before dispatch ever wakes them', async () => {
+    const { token } = await signIn(harness, '+14155551401');
+    const rider = asUser(harness, token);
+    const { ride } = (
+      await rider.post('/v1/rides', {
+        rideTypeId: 'standard',
+        pickup: FERRY_BUILDING,
+        dropoff: DOLORES_PARK,
+        passengerCount: 1,
+        scheduledFor: harness.clock.now() + 2 * 60 * 60_000,
+      })
+    ).json();
+
+    const cancelled = await rider.post(`/v1/rides/${ride.id}/cancel`, {
+      reason: 'rider_changed_mind',
+    });
+
+    expect(cancelled.json().ride.status).toBe('cancelled');
+    expect((await rider.get('/v1/rides/scheduled')).json().rides).toHaveLength(0);
+  });
+
+  it('records the reason a rider gave, because it decides the fee', async () => {
+    const { token } = await signIn(harness, '+14155551402');
+    const { rideId } = await bookStandardRide(harness, token);
+
+    const response = await asUser(harness, token).post(`/v1/rides/${rideId}/cancel`, {
+      reason: 'driver_no_show',
+      note: 'Nobody arrived after twenty minutes.',
+    });
+
+    const { cancellation } = response.json().ride;
+    expect(cancellation.reason).toBe('driver_no_show');
+    expect(cancellation.note).toMatch(/twenty minutes/);
+  });
+});
+
+describe('signing up', () => {
+  it('consumes the code on the first verify, so a second one is refused', async () => {
+    const phone = '+14155551500';
+    await harness.app.inject({ method: 'POST', url: '/v1/auth/code', payload: { phone } });
+
+    const first = await harness.app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify',
+      payload: { phone, code: '000000', role: 'rider' },
+    });
+    expect(first.statusCode).toBe(200);
+    expect(first.json().isNewUser).toBe(true);
+    expect(first.json().token).toBeTruthy();
+
+    // The apps used to verify a second time to attach a name. It cannot work:
+    // the code is single-use, and the session from the first call is the only
+    // one it will produce.
+    const second = await harness.app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify',
+      payload: { phone, code: '000000', role: 'rider', firstName: 'Ada' },
+    });
+    expect(second.statusCode).toBe(401);
+  });
+
+  it('names a brand-new account through the profile endpoint instead', async () => {
+    const phone = '+14155551501';
+    await harness.app.inject({ method: 'POST', url: '/v1/auth/code', payload: { phone } });
+    const { token } = (
+      await harness.app.inject({
+        method: 'POST',
+        url: '/v1/auth/verify',
+        payload: { phone, code: '000000', role: 'rider' },
+      })
+    ).json();
+
+    const named = await asUser(harness, token).patch('/v1/auth/profile', {
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+    });
+
+    expect(named.statusCode).toBe(200);
+    const me = (await asUser(harness, token).get('/v1/auth/me')).json();
+    expect(me.user.firstName).toBe('Ada');
+    expect(me.user.displayName).toMatch(/^Ada/);
+  });
+});

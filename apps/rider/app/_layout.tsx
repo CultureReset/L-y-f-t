@@ -35,6 +35,9 @@ const Navigator = (): React.JSX.Element => {
         <Stack.Screen name="safety" options={{ animation: 'slide_from_bottom' }} />
         <Stack.Screen name="support" />
         <Stack.Screen name="ticket/[id]" />
+        <Stack.Screen name="places" />
+        <Stack.Screen name="payment/add" />
+        <Stack.Screen name="receipt/[id]" />
       </Stack>
     </>
   );

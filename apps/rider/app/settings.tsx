@@ -22,6 +22,7 @@ import {
 import type { RiderPreferences } from '@lift/core';
 import { ApiError } from '@lift/sdk';
 import { useApp } from '../src/state/AppProvider.js';
+import { goBack } from '../src/navigation.js';
 
 export default function Settings(): React.JSX.Element {
   const theme = useTheme();
@@ -81,7 +82,7 @@ export default function Settings(): React.JSX.Element {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background, paddingTop: insets.top }}>
-      <ScreenHeader title="Settings" onBack={() => router.back()} />
+      <ScreenHeader title="Settings" onBack={() => goBack('/account')} />
 
       <ScrollView
         contentContainerStyle={{

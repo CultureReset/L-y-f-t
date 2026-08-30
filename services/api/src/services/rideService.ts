@@ -36,6 +36,7 @@ import {
   type PlatformConfig,
   type PlatformEvents,
   type Place,
+  type PromoApplication,
   type Ride,
   type RideLeg,
   type RideId,
@@ -87,6 +88,8 @@ export interface RequestRideInput {
   readonly riderNote?: string;
   readonly scheduledFor?: number;
   readonly quoteId?: string;
+  /** Already validated by the promo service; carried through to pricing. */
+  readonly promo?: PromoApplication;
   readonly metadata?: Record<string, unknown>;
 }
 
@@ -151,6 +154,7 @@ export class RideService {
       itinerary,
       passengerCount,
       currency: this.deps.config.market.currency,
+      ...(input.promo ? { promo: input.promo } : {}),
       ...(input.scheduledFor ? { scheduledFor: input.scheduledFor } : {}),
     });
     const quote = bundle.quotes.find((q) => q.rideType.id === rideType.id);
@@ -176,7 +180,10 @@ export class RideService {
       passengerCount,
       createdAt: now,
       updatedAt: now,
-      metadata: input.metadata ?? {},
+      metadata: {
+        ...(input.metadata ?? {}),
+        ...(input.promo ? { promoCode: input.promo.code } : {}),
+      },
       ...(input.paymentMethodId ? { paymentMethodId: input.paymentMethodId } : {}),
       ...(input.riderNote ? { riderNote: input.riderNote } : {}),
       ...(isScheduled ? { scheduledFor: input.scheduledFor } : {}),
@@ -526,6 +533,21 @@ export class RideService {
       statuses: ['completed', 'cancelled', 'expired'],
       limit: query.limit ?? 20,
     });
+  }
+
+  /**
+   * Rides booked for later. These are deliberately not in `history` — they
+   * have not happened yet — but a rider needs to see and cancel them, so they
+   * get their own query rather than being invisible until dispatch wakes up.
+   */
+  async scheduled(query: { riderId: RiderId; limit?: number }): Promise<Ride[]> {
+    const rides = await this.deps.rides.query({
+      riderId: query.riderId,
+      statuses: ['scheduled'],
+      limit: query.limit ?? 20,
+    });
+    // Soonest first: the next trip is the one being looked for.
+    return [...rides].sort((a, b) => (a.scheduledFor ?? 0) - (b.scheduledFor ?? 0));
   }
 
   /** Refresh the route from the driver's live position, e.g. after a detour. */

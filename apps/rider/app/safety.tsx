@@ -25,6 +25,7 @@ import {
 } from '@lift/ui';
 import { formatClockTime, statusLabel } from '@lift/core';
 import { useApp } from '../src/state/AppProvider.js';
+import { goBack } from '../src/navigation.js';
 import { useActiveRide } from '../src/state/useActiveRide.js';
 
 /**
@@ -113,7 +114,7 @@ export default function Safety(): React.JSX.Element {
       <ScreenHeader
         title="Safety"
         subtitle={ride ? statusLabel(ride.status) : 'No ride in progress'}
-        onBack={() => router.back()}
+        onBack={() => goBack('/home')}
       />
 
       <ScrollView

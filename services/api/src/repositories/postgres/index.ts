@@ -32,6 +32,7 @@ import {
   type Place,
   type PlaceId,
   type Position,
+  type PromoRedemption,
   type Ride,
   type RideId,
   type RideOffer,
@@ -52,6 +53,7 @@ import type {
   DriverRepository,
   OfferRepository,
   PaymentMethodRepository,
+  PromoRepository,
   Repositories,
   RideQuery,
   RideRepository,
@@ -834,6 +836,47 @@ class PgChatRepository implements ChatRepository {
   }
 }
 
+class PgPromoRepository implements PromoRepository {
+  constructor(private readonly pool: Pool) {}
+
+  async record(redemption: PromoRedemption): Promise<PromoRedemption> {
+    await this.pool.query(
+      'INSERT INTO promo_redemptions (code, rider_id, ride_id, redeemed_at) VALUES ($1,$2,$3,$4)',
+      [redemption.code, redemption.riderId, redemption.rideId ?? null, redemption.redeemedAt],
+    );
+    return redemption;
+  }
+
+  async countForRider(code: string, riderId: RiderId): Promise<number> {
+    const { rows } = await this.pool.query(
+      'SELECT COUNT(*)::int AS count FROM promo_redemptions WHERE code = $1 AND rider_id = $2',
+      [code, riderId],
+    );
+    return (rows[0]?.count as number) ?? 0;
+  }
+
+  async countTotal(code: string): Promise<number> {
+    const { rows } = await this.pool.query(
+      'SELECT COUNT(*)::int AS count FROM promo_redemptions WHERE code = $1',
+      [code],
+    );
+    return (rows[0]?.count as number) ?? 0;
+  }
+
+  async listForRider(riderId: RiderId): Promise<PromoRedemption[]> {
+    const { rows } = await this.pool.query(
+      'SELECT * FROM promo_redemptions WHERE rider_id = $1 ORDER BY redeemed_at DESC',
+      [riderId],
+    );
+    return rows.map((r) => ({
+      code: r.code as string,
+      riderId: r.rider_id as string,
+      redeemedAt: Number(r.redeemed_at),
+      ...(r.ride_id ? { rideId: r.ride_id as string } : {}),
+    }));
+  }
+}
+
 class PgSupportRepository implements SupportRepository {
   constructor(private readonly pool: Pool) {}
 
@@ -990,6 +1033,7 @@ export const createPostgresRepositories = async (
     paymentMethods: new PgPaymentMethodRepository(pool),
     charges: new PgChargeRepository(pool),
     chat: new PgChatRepository(pool),
+    promos: new PgPromoRepository(pool),
     support: new PgSupportRepository(pool),
     close: () => pool.end(),
   };

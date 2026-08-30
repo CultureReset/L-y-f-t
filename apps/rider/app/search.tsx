@@ -27,8 +27,28 @@ export default function Search(): React.JSX.Element {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { client } = useApp();
-  const params = useLocalSearchParams<{ field?: string; pickup?: string }>();
-  const field = params.field === 'pickup' ? 'pickup' : 'dropoff';
+  /**
+   * The whole itinerary round-trips through the params. Carrying only the one
+   * field being edited would drop the others: changing a pickup used to lose
+   * the destination, because replacing back to `/confirm` builds a fresh
+   * screen rather than returning to the one that was left behind.
+   */
+  const params = useLocalSearchParams<{
+    field?: string;
+    pickup?: string;
+    dropoff?: string;
+    stops?: string;
+    savedLabel?: string;
+    savedIcon?: string;
+  }>();
+  const field: 'pickup' | 'dropoff' | 'stop' | 'saved' =
+    params.field === 'pickup'
+      ? 'pickup'
+      : params.field === 'stop'
+        ? 'stop'
+        : params.field === 'saved'
+          ? 'saved'
+          : 'dropoff';
 
   const [query, setQuery] = useState('');
   const [sections, setSections] = useState<Section[]>([]);
@@ -59,7 +79,8 @@ export default function Search(): React.JSX.Element {
       try {
         const response = await client.searchPlaces({
           q: text,
-          field,
+          // A stop is a destination as far as the place sources are concerned.
+          field: field === 'pickup' ? 'pickup' : 'dropoff',
           limit: 8,
           ...(near ? { near } : {}),
         });
@@ -107,19 +128,41 @@ export default function Search(): React.JSX.Element {
         }
       }
 
-      if (field === 'pickup') {
+      // Saving a place is a different destination entirely: hand the choice
+      // back to the places screen rather than to the booking flow.
+      if (field === 'saved') {
         router.replace({
-          pathname: '/confirm',
-          params: { pickup: JSON.stringify(place), dropoff: params.pickup ?? '' },
+          pathname: '/places',
+          params: {
+            place: JSON.stringify(place),
+            ...(params.savedLabel ? { label: params.savedLabel } : {}),
+            ...(params.savedIcon ? { icon: params.savedIcon } : {}),
+          },
         });
         return;
       }
-      router.replace({
-        pathname: '/confirm',
-        params: { dropoff: JSON.stringify(place) },
-      });
+
+      // Merge the chosen place into the itinerary the screen was given, and
+      // hand the whole thing back.
+      const existingStops: unknown[] = (() => {
+        try {
+          return params.stops ? (JSON.parse(params.stops) as unknown[]) : [];
+        } catch {
+          return [];
+        }
+      })();
+
+      const next = {
+        pickup: field === 'pickup' ? JSON.stringify(place) : (params.pickup ?? ''),
+        dropoff: field === 'dropoff' ? JSON.stringify(place) : (params.dropoff ?? ''),
+        stops: JSON.stringify(
+          field === 'stop' ? [...existingStops, { place }] : existingStops,
+        ),
+      };
+
+      router.replace({ pathname: '/confirm', params: next });
     },
-    [client, field, params.pickup],
+    [client, field, params.pickup, params.dropoff, params.stops, params.savedLabel, params.savedIcon],
   );
 
   const listSections = useMemo(() => sections.filter((s) => s.data.length > 0), [sections]);
@@ -145,9 +188,25 @@ export default function Search(): React.JSX.Element {
           autoFocus
           value={query}
           onChangeText={setQuery}
-          placeholder={field === 'pickup' ? 'Set your pickup' : 'Where to?'}
+          placeholder={
+            field === 'pickup'
+              ? 'Set your pickup'
+              : field === 'stop'
+                ? 'Add a stop'
+                : field === 'saved'
+                  ? 'Find an address to save'
+                  : 'Where to?'
+          }
           placeholderTextColor={theme.colors.textMuted}
-          accessibilityLabel={field === 'pickup' ? 'Pickup location' : 'Destination'}
+          accessibilityLabel={
+            field === 'pickup'
+              ? 'Pickup location'
+              : field === 'stop'
+                ? 'Stop'
+                : field === 'saved'
+                  ? 'Address to save'
+                  : 'Destination'
+          }
           style={{
             flex: 1,
             backgroundColor: theme.colors.surfaceSunken,

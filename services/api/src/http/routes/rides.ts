@@ -5,12 +5,14 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
+  AppError,
   buildTimeline,
   money,
   placeSchema,
   rideDurations,
   waypointSchema,
   type Place,
+  type PromoApplication,
   type RideId,
 } from '@lift/core';
 import type { Container } from '../../container.js';
@@ -34,6 +36,7 @@ const requestSchema = z.object({
   paymentMethodId: z.string().optional(),
   riderNote: z.string().max(300).optional(),
   scheduledFor: z.number().optional(),
+  promoCode: z.string().max(40).optional(),
   quoteId: z.string().optional(),
   metadata: z.record(z.unknown()).optional(),
 });
@@ -60,6 +63,26 @@ export const registerRideRoutes = (app: FastifyInstance, container: Container): 
    */
   app.post('/rides/quote', async (request) => {
     const input = parse(quoteSchema, request.body);
+
+    // A code that no longer applies must not silently price as if it did, and
+    // must not fail the whole quote either — the rider is told, and sees the
+    // undiscounted price beside the reason.
+    let promo: PromoApplication | undefined;
+    let promoError: string | undefined;
+    if (input.promoCode && container.config.features.promoCodes) {
+      const riderId = request.actor?.riderId;
+      if (!riderId) {
+        promoError = 'Sign in to use a promo code.';
+      } else {
+        try {
+          promo = await container.promos.validate({ code: input.promoCode, riderId });
+        } catch (error) {
+          promoError =
+            error instanceof AppError ? error.userMessage : 'That code could not be applied.';
+        }
+      }
+    }
+
     const bundle = await container.pricing.quote({
       itinerary: {
         pickup: input.pickup as Place,
@@ -67,11 +90,14 @@ export const registerRideRoutes = (app: FastifyInstance, container: Container): 
         stops: input.stops as never,
       },
       passengerCount: input.passengerCount,
+      ...(promo ? { promo } : {}),
       ...(input.scheduledFor ? { scheduledFor: input.scheduledFor } : {}),
     });
 
     return {
       quoteId: bundle.quoteId,
+      ...(promo ? { promo } : {}),
+      ...(promoError ? { promoError } : {}),
       expiresAt: bundle.expiresAt,
       route: {
         distanceMeters: bundle.route.distanceMeters,
@@ -101,6 +127,19 @@ export const registerRideRoutes = (app: FastifyInstance, container: Container): 
   app.post('/rides', async (request) => {
     const riderId = requireRider(request);
     const input = parse(requestSchema, request.body);
+
+    // Re-checked here against the ride type actually chosen: a code valid for
+    // one tier is not valid for all of them, and the confirm screen's check
+    // happened before the rider made that choice.
+    const promo =
+      input.promoCode && container.config.features.promoCodes
+        ? await container.promos.validate({
+            code: input.promoCode,
+            riderId,
+            rideTypeId: input.rideTypeId,
+          })
+        : undefined;
+
     const ride = await container.rides.requestRide({
       riderId,
       rideTypeId: input.rideTypeId,
@@ -112,8 +151,13 @@ export const registerRideRoutes = (app: FastifyInstance, container: Container): 
       ...(input.riderNote ? { riderNote: input.riderNote } : {}),
       ...(input.scheduledFor ? { scheduledFor: input.scheduledFor } : {}),
       ...(input.quoteId ? { quoteId: input.quoteId } : {}),
+      ...(promo ? { promo } : {}),
       ...(input.metadata ? { metadata: input.metadata } : {}),
     });
+
+    // Redeemed only once the ride exists, so checking a code never burns it.
+    if (promo) await container.promos.redeem({ code: promo.code, riderId, rideId: ride.id });
+
     return { ride };
   });
 
@@ -136,6 +180,12 @@ export const registerRideRoutes = (app: FastifyInstance, container: Container): 
     );
     const rides = await container.rides.history({ riderId, ...query });
     return { rides };
+  });
+
+  /** Rides booked for later, soonest first. */
+  app.get('/rides/scheduled', async (request) => {
+    const riderId = requireRider(request);
+    return { rides: await container.rides.scheduled({ riderId }) };
   });
 
   app.get('/rides/:rideId', async (request) => {

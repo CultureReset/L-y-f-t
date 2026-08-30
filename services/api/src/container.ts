@@ -13,6 +13,7 @@ import {
   RideTypeCatalog,
   TypedEmitter,
   defaultHelpCenter,
+  defaultPromos,
   defaultRideTypes,
   defaultTicketCatalog,
   combineSurge,
@@ -26,6 +27,7 @@ import {
   type HelpCenter,
   type MatchingStrategy,
   type PaymentGateway,
+  type Promo,
   type PlatformConfig,
   type PlatformEvents,
   type RideType,
@@ -58,6 +60,7 @@ import { RideService } from './services/rideService.js';
 import { DriverService } from './services/driverService.js';
 import { RiderService } from './services/riderService.js';
 import { ChatService } from './services/chatService.js';
+import { PromoService } from './services/promoService.js';
 import { SupportService } from './services/supportService.js';
 import {
   NotificationService,
@@ -81,6 +84,8 @@ export interface ContainerOverrides {
   readonly matchingStrategy?: MatchingStrategy;
   /** Replace or extend the shipped help articles and ticket categories. */
   readonly helpCenter?: HelpCenter;
+  /** Replace the shipped promo codes with an operator's own. */
+  readonly promos?: readonly Promo[];
   readonly ticketCatalog?: TicketCatalog;
   readonly logger?: Logger;
 }
@@ -125,6 +130,7 @@ export interface Container {
   readonly drivers: DriverService;
   readonly riders: RiderService;
   readonly chat: ChatService;
+  readonly promos: PromoService;
   readonly support: SupportService;
   readonly notifications: NotificationService;
   /** Device tokens for push, so the apps can register on launch. */
@@ -327,6 +333,14 @@ export const createContainer = async (
     events,
   });
 
+  const promos = new PromoService({
+    promos: repositories.promos,
+    rides: repositories.rides,
+    catalog: overrides.promos ?? defaultPromos(config.market.currency),
+    currency: config.market.currency,
+    clock,
+  });
+
   const support = new SupportService({
     support: repositories.support,
     rides: repositories.rides,
@@ -362,6 +376,7 @@ export const createContainer = async (
     drivers,
     riders,
     chat,
+    promos,
     support,
     notifications,
     pushTokens,

@@ -14,7 +14,7 @@ import { useDriver } from '../src/state/DriverProvider.js';
 export default function SignIn(): React.JSX.Element {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { client, signIn, apiUrl } = useDriver();
+  const { client, signIn, refresh, apiUrl } = useDriver();
 
   const [step, setStep] = useState<'phone' | 'code' | 'name'>('phone');
   const [phone, setPhone] = useState('');
@@ -42,24 +42,45 @@ export default function SignIn(): React.JSX.Element {
     }
   };
 
-  const verify = async (name?: { firstName: string; lastName: string }): Promise<void> => {
+  /**
+   * Verifying consumes the one-time code and, for an unknown number, creates
+   * the account there and then. So the session it returns is the only one that
+   * code will ever produce — asking for a name must not throw it away and
+   * verify again, which is how the second call used to fail with "that code
+   * expired". The token is held, then the name is saved through the profile
+   * endpoint the account already has access to.
+   */
+  const verify = async (): Promise<void> => {
     setBusy(true);
     setError(undefined);
     try {
-      const session = await client.verifyCode({
-        phone,
-        code,
-        role: 'driver',
-        ...(name ? name : {}),
-      });
-      if (session.isNewUser && !name) {
+      const session = await client.verifyCode({ phone, code, role: 'driver' });
+      await signIn(session.token);
+
+      if (session.isNewUser) {
         setStep('name');
         return;
       }
-      await signIn(session.token);
       router.replace('/');
     } catch (e) {
       setError(e instanceof ApiError ? e.userMessage : 'Something went wrong');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveName = async (): Promise<void> => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      await client.updateProfile({
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+      });
+      await refresh();
+      router.replace('/');
+    } catch (e) {
+      setError(e instanceof ApiError ? e.userMessage : 'Could not save your name');
     } finally {
       setBusy(false);
     }
@@ -168,7 +189,7 @@ export default function SignIn(): React.JSX.Element {
               </Row>
               <Button
                 label="Continue"
-                onPress={() => void verify({ firstName, lastName })}
+                onPress={() => void saveName()}
                 loading={busy}
                 disabled={firstName.trim().length === 0}
               />

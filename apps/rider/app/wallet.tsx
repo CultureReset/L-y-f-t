@@ -8,18 +8,12 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Badge, Button, Card, Column, Divider, Row, Text, useTheme } from '@lift/ui';
 import { formatMoney, type Charge } from '@lift/core';
 import { ApiError, type PaymentMethodView } from '@lift/sdk';
 import { useApp } from '../src/state/AppProvider.js';
-
-const DEMO_CARDS = [
-  { brand: 'visa', last4: '4242' },
-  { brand: 'mastercard', last4: '5454' },
-  { brand: 'amex', last4: '0005' },
-];
 
 export default function Wallet(): React.JSX.Element {
   const theme = useTheme();
@@ -28,7 +22,6 @@ export default function Wallet(): React.JSX.Element {
 
   const [methods, setMethods] = useState<PaymentMethodView[]>([]);
   const [charges, setCharges] = useState<Charge[]>([]);
-  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -43,29 +36,13 @@ export default function Wallet(): React.JSX.Element {
     }
   }, [client]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  const addCard = async (): Promise<void> => {
-    setBusy(true);
-    try {
-      const next = DEMO_CARDS[methods.length % DEMO_CARDS.length]!;
-      await client.addPaymentMethod({
-        kind: 'card',
-        brand: next.brand,
-        last4: next.last4,
-        expiryMonth: 12,
-        expiryYear: new Date().getFullYear() + 3,
-        makeDefault: methods.length === 0,
-      });
-      await load();
-    } catch (e) {
-      Alert.alert('Could not add card', e instanceof ApiError ? e.userMessage : 'Try again.');
-    } finally {
-      setBusy(false);
-    }
-  };
+  // Reloads whenever the screen regains focus, so a card added on the form
+  // shows up on return without a manual refresh.
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
 
   const makeDefault = async (id: string): Promise<void> => {
     const { methods: updated } = await client.setDefaultPaymentMethod(id);
@@ -131,7 +108,11 @@ export default function Wallet(): React.JSX.Element {
               Add a card to start riding.
             </Text>
           ) : null}
-          <Button label="Add a card" variant="secondary" onPress={() => void addCard()} loading={busy} />
+          <Button
+            label="Add a card"
+            variant="secondary"
+            onPress={() => router.push('/payment/add')}
+          />
         </Column>
 
         <Divider />

@@ -37,6 +37,9 @@ import type {
   PaymentMethodInput,
   Ride,
   RideOffer,
+  PromoApplication,
+  PromoRedemption,
+  PromoWallet,
   SavedPlace,
   SupportTicket,
   VehicleInput,
@@ -289,6 +292,7 @@ export class LiftClient {
     stops?: readonly { place: Place; plannedStopMinutes?: number }[];
     passengerCount?: number;
     scheduledFor?: number;
+    promoCode?: string;
   }): Promise<QuoteResponse> {
     return this.post('/v1/rides/quote', input);
   }
@@ -302,6 +306,7 @@ export class LiftClient {
     paymentMethodId?: string;
     riderNote?: string;
     scheduledFor?: number;
+    promoCode?: string;
     quoteId?: string;
     metadata?: Record<string, unknown>;
   }): Promise<{ ride: Ride }> {
@@ -318,6 +323,11 @@ export class LiftClient {
 
   rideHistory(options: { limit?: number; offset?: number } = {}): Promise<{ rides: Ride[] }> {
     return this.get('/v1/rides/history', options);
+  }
+
+  /** Rides booked for later, soonest first. */
+  scheduledRides(): Promise<{ rides: Ride[] }> {
+    return this.get('/v1/rides/scheduled');
   }
 
   cancellationPreview(rideId: string): Promise<CancellationPreview> {
@@ -351,6 +361,22 @@ export class LiftClient {
 
   quickReplies(): Promise<{ replies: string[] }> {
     return this.get('/v1/rides/quick-replies');
+  }
+
+  // --------------------------------------------------------------- promos
+
+  /** Codes this rider can still use, with what is left on each. */
+  promos(): Promise<{ promos: PromoWallet[] }> {
+    return this.get('/v1/rider/promos');
+  }
+
+  /** Check a code without spending it — safe to call as the rider types. */
+  checkPromo(code: string): Promise<{ promo: PromoApplication }> {
+    return this.post('/v1/rider/promos/check', { code });
+  }
+
+  promoHistory(): Promise<{ redemptions: PromoRedemption[] }> {
+    return this.get('/v1/rider/promos/history');
   }
 
   // ------------------------------------------------------------- support

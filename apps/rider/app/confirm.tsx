@@ -4,21 +4,29 @@
  *
  * The quote is server-computed and carries an id; booking cites that id so the
  * price the rider confirms is provably the price they were shown.
+ *
+ * The whole itinerary — pickup, stops, dropoff — lives in the route params, so
+ * editing any one of them through the search screen round-trips the rest
+ * rather than dropping it.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  Badge,
   Button,
+  Card,
   Column,
   Divider,
+  Field,
   ItineraryLines,
   MapView,
   RideTypeOption,
   Row,
+  ScreenHeader,
   Sheet,
   Text,
   useTheme,
@@ -32,43 +40,56 @@ import {
   meetingPoint,
   type LatLng,
   type Place,
+  type Waypoint,
 } from '@lift/core';
 import { ApiError, type PaymentMethodView, type QuoteResponse } from '@lift/sdk';
 import { useApp } from '../src/state/AppProvider.js';
+
+/** A JSON param that may be absent or malformed; never throw over one. */
+const parseParam = <T,>(raw: string | undefined, fallback: T): T => {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+};
 
 export default function Confirm(): React.JSX.Element {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { client, config } = useApp();
-  const params = useLocalSearchParams<{ pickup?: string; dropoff?: string }>();
+  const params = useLocalSearchParams<{
+    pickup?: string;
+    dropoff?: string;
+    stops?: string;
+  }>();
 
   const [pickup, setPickup] = useState<Place>();
   const [dropoff, setDropoff] = useState<Place>();
+  const [stops, setStops] = useState<readonly Waypoint[]>([]);
   const [quote, setQuote] = useState<QuoteResponse>();
   const [selected, setSelected] = useState<string>();
   const [method, setMethod] = useState<PaymentMethodView>();
   const [passengers, setPassengers] = useState(1);
+  const [note, setNote] = useState('');
+  const [promoCode, setPromoCode] = useState('');
+  const [scheduledFor, setScheduledFor] = useState<number>();
+  const [sheet, setSheet] = useState<'none' | 'schedule' | 'promo' | 'note' | 'info'>('none');
+  const [infoRideTypeId, setInfoRideTypeId] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [booking, setBooking] = useState(false);
   const [error, setError] = useState<string>();
 
-  // The dropoff arrives from search; the pickup defaults to where the rider is.
+  // The itinerary arrives from search or home; the pickup defaults to where
+  // the rider is.
   useEffect(() => {
-    if (params.dropoff) {
-      try {
-        setDropoff(JSON.parse(params.dropoff) as Place);
-      } catch {
-        setError('That destination could not be read.');
-      }
-    }
-    if (params.pickup) {
-      try {
-        setPickup(JSON.parse(params.pickup) as Place);
-      } catch {
-        /* fall through to the current-location default */
-      }
-    }
-  }, [params.pickup, params.dropoff]);
+    const nextDropoff = parseParam<Place | undefined>(params.dropoff, undefined);
+    if (nextDropoff) setDropoff(nextDropoff);
+    const nextPickup = parseParam<Place | undefined>(params.pickup, undefined);
+    if (nextPickup) setPickup(nextPickup);
+    setStops(parseParam<Waypoint[]>(params.stops, []));
+  }, [params.pickup, params.dropoff, params.stops]);
 
   /**
    * Work out the pickup point. A location fix is the best answer, but it can be
@@ -134,7 +155,14 @@ export default function Confirm(): React.JSX.Element {
     setLoading(true);
     setError(undefined);
     try {
-      const response = await client.quote({ pickup, dropoff, passengerCount: passengers });
+      const response = await client.quote({
+        pickup,
+        dropoff,
+        stops,
+        passengerCount: passengers,
+        ...(promoCode ? { promoCode } : {}),
+        ...(scheduledFor ? { scheduledFor } : {}),
+      });
       setQuote(response);
       // Keep the rider's choice if it is still offered; otherwise pick the
       // first available tier.
@@ -147,7 +175,7 @@ export default function Confirm(): React.JSX.Element {
     } finally {
       setLoading(false);
     }
-  }, [client, pickup, dropoff, passengers]);
+  }, [client, pickup, dropoff, stops, passengers, promoCode, scheduledFor]);
 
   useEffect(() => {
     void loadQuote();
@@ -167,6 +195,22 @@ export default function Confirm(): React.JSX.Element {
     [quote, selected],
   );
 
+  /** Navigate to search, carrying the whole itinerary so nothing is lost. */
+  const editField = useCallback(
+    (field: 'pickup' | 'dropoff' | 'stop') => {
+      router.push({
+        pathname: '/search',
+        params: {
+          field,
+          pickup: pickup ? JSON.stringify(pickup) : '',
+          dropoff: dropoff ? JSON.stringify(dropoff) : '',
+          stops: JSON.stringify(stops),
+        },
+      });
+    },
+    [pickup, dropoff, stops],
+  );
+
   const book = async (): Promise<void> => {
     if (!pickup || !dropoff || !chosen || !quote) return;
     setBooking(true);
@@ -176,11 +220,16 @@ export default function Confirm(): React.JSX.Element {
         rideTypeId: chosen.rideTypeId,
         pickup,
         dropoff,
+        stops,
         passengerCount: passengers,
         quoteId: quote.quoteId,
+        ...(note.trim() ? { riderNote: note.trim() } : {}),
+        ...(promoCode ? { promoCode } : {}),
+        ...(scheduledFor ? { scheduledFor } : {}),
         ...(method ? { paymentMethodId: method.id } : {}),
       });
-      router.replace(`/ride/${ride.id}`);
+      // A ride booked for later has no live screen to watch yet.
+      router.replace(scheduledFor ? '/activity' : `/ride/${ride.id}`);
     } catch (e) {
       if (e instanceof ApiError && e.code === 'quote_expired') {
         // Silently re-price and let the rider confirm the fresh number.
@@ -197,9 +246,12 @@ export default function Confirm(): React.JSX.Element {
   const markers = useMemo<MapMarker[]>(() => {
     const out: MapMarker[] = [];
     if (pickup) out.push({ id: 'pickup', kind: 'pickup', coordinate: meetingPoint(pickup) });
+    stops.forEach((stop, index) => {
+      out.push({ id: `stop-${index}`, kind: 'stop', coordinate: meetingPoint(stop.place) });
+    });
     if (dropoff) out.push({ id: 'dropoff', kind: 'dropoff', coordinate: meetingPoint(dropoff) });
     return out;
-  }, [pickup, dropoff]);
+  }, [pickup, dropoff, stops]);
 
   const polylines = useMemo<MapPolyline[]>(
     () =>
@@ -208,6 +260,10 @@ export default function Confirm(): React.JSX.Element {
         : [],
     [quote],
   );
+
+  const canAddStop = (config?.features.multiStop ?? false) && stops.length < 3;
+  const canSchedule = config?.features.scheduledRides ?? false;
+  const canPromo = config?.features.promoCodes ?? false;
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
@@ -239,88 +295,159 @@ export default function Confirm(): React.JSX.Element {
         <Text variant="title">←</Text>
       </Pressable>
 
-      <Sheet style={{ paddingBottom: insets.bottom + theme.spacing.lg, maxHeight: '68%' }}>
-        <Column gap="md">
-          {dropoff ? (
-            <Pressable
-              onPress={() =>
-                router.push({ pathname: '/search', params: { field: 'pickup' } })
-              }
-              accessibilityRole="button"
-              accessibilityLabel="Change pickup"
-            >
-              <ItineraryLines
-                pickup={pickup?.name ?? 'Tap to set your pickup'}
-                dropoff={dropoff.name}
-              />
-            </Pressable>
-          ) : null}
-
-          <Divider />
-
-          {!quote ? (
-            <Column gap="md" style={{ paddingVertical: theme.spacing.xl }}>
-              {loading ? <ActivityIndicator color={theme.colors.primary} /> : null}
-              <Text variant="caption" color="muted" align="center">
-                {loading
-                  ? 'Pricing your trip…'
-                  : pickup
-                    ? 'Choose a destination to see prices.'
-                    : 'Set your pickup to see prices.'}
-              </Text>
-            </Column>
-          ) : null}
-
-          {quote ? (
-            <>
-              <Row justify="space-between">
-                <Text variant="caption" color="secondary">
-                  {formatDuration(quote.route.durationMs)} ·{' '}
-                  {(quote.route.distanceMeters / 1609.344).toFixed(1)} mi
-                </Text>
-                <PassengerStepper value={passengers} onChange={setPassengers} />
-              </Row>
-
-              <ScrollView style={{ maxHeight: 280 }} showsVerticalScrollIndicator={false}>
-                <Column gap="xs">
-                  {quote.quotes.map((option) => (
-                    <RideTypeOption
-                      key={option.rideTypeId}
-                      quote={option}
-                      selected={option.rideTypeId === selected}
-                      onSelect={() => setSelected(option.rideTypeId)}
-                    />
-                  ))}
-                </Column>
-              </ScrollView>
-
-              <Divider />
-
+      <Sheet style={{ paddingBottom: insets.bottom + theme.spacing.lg, maxHeight: '78%' }}>
+        <ScrollView showsVerticalScrollIndicator={false} style={{ flexShrink: 1 }}>
+          <Column gap="md">
+            {/* The itinerary. Every line is tappable, including each stop. */}
+            <Column gap="xs">
               <Pressable
-                onPress={() => router.push('/wallet')}
+                onPress={() => editField('pickup')}
                 accessibilityRole="button"
-                accessibilityLabel="Change payment method"
+                accessibilityLabel="Change pickup"
               >
+                <ItineraryLines
+                  pickup={pickup?.name ?? 'Tap to set your pickup'}
+                  dropoff={dropoff?.name ?? 'Tap to set your destination'}
+                  stops={stops.map((s) => s.place.name)}
+                />
+              </Pressable>
+
+              <Row gap="sm" wrap>
+                {canAddStop ? (
+                  <Button label="+ Add stop" variant="ghost" size="sm" onPress={() => editField('stop')} />
+                ) : null}
+                {stops.length > 0 ? (
+                  <Button
+                    label="Clear stops"
+                    variant="ghost"
+                    size="sm"
+                    onPress={() => setStops([])}
+                  />
+                ) : null}
+                <Button
+                  label="Change destination"
+                  variant="ghost"
+                  size="sm"
+                  onPress={() => editField('dropoff')}
+                />
+              </Row>
+            </Column>
+
+            <Divider />
+
+            {!quote ? (
+              <Column gap="md" style={{ paddingVertical: theme.spacing.xl }}>
+                {loading ? <ActivityIndicator color={theme.colors.primary} /> : null}
+                <Text variant="caption" color="muted" align="center">
+                  {loading
+                    ? 'Pricing your trip…'
+                    : pickup
+                      ? 'Choose a destination to see prices.'
+                      : 'Set your pickup to see prices.'}
+                </Text>
+              </Column>
+            ) : null}
+
+            {quote ? (
+              <>
                 <Row justify="space-between">
                   <Text variant="caption" color="secondary">
-                    {method ? `💳 ${method.displayLabel}` : '💳 Add a payment method'}
+                    {formatDuration(quote.route.durationMs)} ·{' '}
+                    {(quote.route.distanceMeters / 1609.344).toFixed(1)} mi
                   </Text>
-                  <Text variant="caption" color="primary">
-                    Change
-                  </Text>
+                  <PassengerStepper value={passengers} onChange={setPassengers} />
                 </Row>
-              </Pressable>
-            </>
-          ) : null}
 
-          {error ? (
-            <Text variant="caption" color="danger">
-              {error}
-            </Text>
-          ) : null}
+                <Column gap="xs">
+                  {quote.quotes.map((option) => (
+                    <Pressable
+                      key={option.rideTypeId}
+                      onLongPress={() => {
+                        setInfoRideTypeId(option.rideTypeId);
+                        setSheet('info');
+                      }}
+                      delayLongPress={300}
+                    >
+                      <RideTypeOption
+                        quote={option}
+                        selected={option.rideTypeId === selected}
+                        onSelect={() => setSelected(option.rideTypeId)}
+                      />
+                    </Pressable>
+                  ))}
+                  <Text variant="caption" color="muted" align="center">
+                    Hold a ride type to see what it includes.
+                  </Text>
+                </Column>
 
+                <Divider />
+
+                {/* Everything optional lives in one row of chips rather than
+                    stacking four more sections above the confirm button. */}
+                <Row gap="sm" wrap>
+                  <Chip
+                    label={
+                      scheduledFor ? `🕒 ${formatWhen(scheduledFor)}` : '🕒 Ride now'
+                    }
+                    active={scheduledFor !== undefined}
+                    onPress={() => setSheet('schedule')}
+                    disabled={!canSchedule}
+                  />
+                  <Chip
+                    label={quote.promo ? `🏷 ${quote.promo.code}` : '🏷 Promo'}
+                    active={Boolean(quote.promo)}
+                    onPress={() => setSheet('promo')}
+                    disabled={!canPromo}
+                  />
+                  <Chip
+                    label={note.trim() ? '📝 Note added' : '📝 Note'}
+                    active={note.trim().length > 0}
+                    onPress={() => setSheet('note')}
+                  />
+                  <Chip
+                    label={method ? `💳 ${method.displayLabel}` : '💳 Add card'}
+                    active={false}
+                    onPress={() => router.push('/wallet')}
+                  />
+                </Row>
+
+                {quote.promoError ? (
+                  <Text variant="caption" color="danger">
+                    {quote.promoError}
+                  </Text>
+                ) : null}
+                {quote.promo ? (
+                  <Text variant="caption" color="success">
+                    {quote.promo.label} applied.
+                  </Text>
+                ) : null}
+              </>
+            ) : null}
+
+            {error ? (
+              <Text variant="caption" color="danger">
+                {error}
+              </Text>
+            ) : null}
+
+          </Column>
+        </ScrollView>
+
+        {/*
+          The primary action is pinned below the scroll region. Letting it
+          scroll away behind five ride types is how a rider ends up unable to
+          find the button that books the trip.
+        */}
+        <Column gap="sm" style={{ paddingTop: theme.spacing.md }}>
+          <Divider />
           <Button
-            label={chosen ? `Confirm ${chosen.name}` : 'Choose a ride'}
+            label={
+              chosen
+                ? scheduledFor
+                  ? `Schedule ${chosen.name}`
+                  : `Confirm ${chosen.name}`
+                : 'Choose a ride'
+            }
             caption={chosen ? formatMoney(chosen.fare.total) : undefined}
             onPress={() => void book()}
             loading={booking}
@@ -328,9 +455,430 @@ export default function Confirm(): React.JSX.Element {
           />
         </Column>
       </Sheet>
+
+      <SchedulePicker
+        visible={sheet === 'schedule'}
+        value={scheduledFor}
+        onClose={() => setSheet('none')}
+        onChange={(next) => {
+          setScheduledFor(next);
+          setSheet('none');
+        }}
+      />
+
+      <PromoSheet
+        visible={sheet === 'promo'}
+        applied={quote?.promo?.code}
+        onClose={() => setSheet('none')}
+        onApply={(code) => {
+          setPromoCode(code);
+          setSheet('none');
+        }}
+      />
+
+      <NoteSheet
+        visible={sheet === 'note'}
+        value={note}
+        onClose={() => setSheet('none')}
+        onSave={(next) => {
+          setNote(next);
+          setSheet('none');
+        }}
+      />
+
+      <RideTypeInfo
+        visible={sheet === 'info'}
+        rideTypeId={infoRideTypeId}
+        onClose={() => setSheet('none')}
+      />
     </View>
   );
 }
+
+// ------------------------------------------------------------------ pieces
+
+/** "Today, 6:15 PM" — the answer to "when is this ride?". */
+const formatWhen = (at: number): string => {
+  const when = new Date(at);
+  const today = new Date();
+  const sameDay = when.toDateString() === today.toDateString();
+  const tomorrow = new Date(today.getTime() + 86_400_000);
+  const isTomorrow = when.toDateString() === tomorrow.toDateString();
+  const time = when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  if (sameDay) return `Today ${time}`;
+  if (isTomorrow) return `Tomorrow ${time}`;
+  return `${when.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })} ${time}`;
+};
+
+const Chip = ({
+  label,
+  active,
+  onPress,
+  disabled = false,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+  disabled?: boolean;
+}): React.JSX.Element | null => {
+  const theme = useTheme();
+  // A control for a feature this market has turned off is not shown at all —
+  // a greyed-out button that can never work is worse than no button.
+  if (disabled) return null;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={{
+        paddingHorizontal: theme.spacing.md,
+        paddingVertical: theme.spacing.sm,
+        borderRadius: theme.radius.pill,
+        borderWidth: 1,
+        borderColor: active ? theme.colors.primary : theme.colors.border,
+        backgroundColor: active ? theme.colors.primaryMuted : 'transparent',
+      }}
+    >
+      <Text variant="caption" color={active ? 'primary' : 'secondary'}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+};
+
+/**
+ * A modal that sits over the sheet. Used for every optional detail, so they
+ * all behave the same way and none of them push the confirm button off screen.
+ */
+const BottomSheetModal = ({
+  visible,
+  title,
+  onClose,
+  children,
+}: {
+  visible: boolean;
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}): React.JSX.Element => {
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable
+        onPress={onClose}
+        accessibilityLabel="Dismiss"
+        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }}
+      />
+      <View
+        style={{
+          backgroundColor: theme.colors.background,
+          borderTopLeftRadius: theme.radius.xl,
+          borderTopRightRadius: theme.radius.xl,
+          paddingBottom: insets.bottom + theme.spacing.lg,
+          maxHeight: '70%',
+        }}
+      >
+        <ScreenHeader title={title} onBack={onClose} />
+        <ScrollView
+          contentContainerStyle={{ padding: theme.spacing.lg, gap: theme.spacing.md }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {children}
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+};
+
+/**
+ * Scheduling, as discrete slots rather than a free date picker: every ridehail
+ * scheduler works this way because a pickup window is what dispatch can
+ * actually honour, and it keeps the app free of a native date-picker
+ * dependency.
+ */
+const SchedulePicker = ({
+  visible,
+  value,
+  onClose,
+  onChange,
+}: {
+  visible: boolean;
+  value?: number;
+  onClose: () => void;
+  onChange: (next: number | undefined) => void;
+}): React.JSX.Element => {
+  const [day, setDay] = useState(0);
+
+  const days = useMemo(() => {
+    const today = new Date();
+    return Array.from({ length: 7 }, (_, offset) => {
+      const date = new Date(today);
+      date.setDate(today.getDate() + offset);
+      return {
+        offset,
+        label:
+          offset === 0
+            ? 'Today'
+            : offset === 1
+              ? 'Tomorrow'
+              // Built from parts rather than one locale pattern: some locales
+              // put the day first, which reads as "1 Tue" on a chip.
+              : `${date.toLocaleDateString(undefined, { weekday: 'short' })} ${date.getDate()}`,
+        date,
+      };
+    });
+  }, [visible]);
+
+  /**
+   * Slots start at least 30 minutes out — booking a "scheduled" ride for two
+   * minutes from now is a normal ride with extra steps — and run to midnight.
+   */
+  const slots = useMemo(() => {
+    const chosen = days[day]?.date ?? new Date();
+    const start = new Date(chosen);
+    start.setSeconds(0, 0);
+
+    const earliest = new Date(Date.now() + 30 * 60_000);
+    if (day === 0 && start < earliest) {
+      start.setTime(earliest.getTime());
+      // Round up to the next quarter hour.
+      start.setMinutes(Math.ceil(start.getMinutes() / 15) * 15, 0, 0);
+    } else if (day > 0) {
+      start.setHours(0, 0, 0, 0);
+    }
+
+    const out: number[] = [];
+    const end = new Date(chosen);
+    end.setHours(23, 45, 0, 0);
+    for (let t = start.getTime(); t <= end.getTime(); t += 15 * 60_000) out.push(t);
+    return out;
+  }, [day, days]);
+
+  return (
+    <BottomSheetModal visible={visible} title="When?" onClose={onClose}>
+      <Row gap="sm" wrap>
+        {days.map((option) => (
+          <Chip
+            key={option.offset}
+            label={option.label}
+            active={option.offset === day}
+            onPress={() => setDay(option.offset)}
+          />
+        ))}
+      </Row>
+
+      <Divider />
+
+      {slots.length === 0 ? (
+        <Text variant="caption" color="muted">
+          No times left today. Try tomorrow.
+        </Text>
+      ) : (
+        <Row gap="sm" wrap>
+          {slots.map((slot) => (
+            <Chip
+              key={slot}
+              label={new Date(slot).toLocaleTimeString(undefined, {
+                hour: 'numeric',
+                minute: '2-digit',
+              })}
+              active={value === slot}
+              onPress={() => onChange(slot)}
+            />
+          ))}
+        </Row>
+      )}
+
+      {value !== undefined ? (
+        <Button label="Ride now instead" variant="ghost" onPress={() => onChange(undefined)} />
+      ) : null}
+    </BottomSheetModal>
+  );
+};
+
+/** Enter a code, or pick one the rider already has. */
+const PromoSheet = ({
+  visible,
+  applied,
+  onClose,
+  onApply,
+}: {
+  visible: boolean;
+  applied?: string;
+  onClose: () => void;
+  onApply: (code: string) => void;
+}): React.JSX.Element => {
+  const { client } = useApp();
+  const [code, setCode] = useState('');
+  const [checking, setChecking] = useState(false);
+  const [problem, setProblem] = useState<string>();
+  const [wallet, setWallet] = useState<
+    readonly { promo: { code: string; label: string; description: string }; redemptionsLeft: number }[]
+  >([]);
+
+  useEffect(() => {
+    if (!visible) return;
+    setProblem(undefined);
+    void client
+      .promos()
+      .then((r) => setWallet(r.promos))
+      .catch(() => setWallet([]));
+  }, [visible, client]);
+
+  /**
+   * Checked before it is applied, so the rider hears "you've already used
+   * that" here rather than watching the price silently not change.
+   */
+  const apply = async (next: string): Promise<void> => {
+    setChecking(true);
+    setProblem(undefined);
+    try {
+      const { promo } = await client.checkPromo(next);
+      onApply(promo.code);
+    } catch (e) {
+      setProblem(e instanceof ApiError ? e.userMessage : 'That code could not be applied.');
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  return (
+    <BottomSheetModal visible={visible} title="Promo code" onClose={onClose}>
+      <Field
+        label="Enter a code"
+        value={code}
+        onChangeText={(next) => {
+          setCode(next);
+          setProblem(undefined);
+        }}
+        autoCapitalize="characters"
+        placeholder="WELCOME50"
+        {...(problem ? { error: problem } : {})}
+      />
+      <Button
+        label="Apply"
+        onPress={() => void apply(code)}
+        disabled={code.trim().length === 0 || checking}
+        loading={checking}
+      />
+
+      {wallet.length > 0 ? (
+        <>
+          <Divider />
+          <Text variant="label" color="muted">
+            AVAILABLE TO YOU
+          </Text>
+          {wallet.map((entry) => (
+            <Card key={entry.promo.code} padded="md">
+              <Row justify="space-between" align="center" gap="md">
+                <Column gap="xxs" style={{ flex: 1 }}>
+                  <Row gap="sm" align="center">
+                    <Text variant="bodyStrong">{entry.promo.code}</Text>
+                    {applied === entry.promo.code ? <Badge label="Applied" tone="success" /> : null}
+                  </Row>
+                  <Text variant="caption" color="muted">
+                    {entry.promo.description}
+                  </Text>
+                </Column>
+                <Button
+                  label="Use"
+                  variant="secondary"
+                  size="sm"
+                  onPress={() => void apply(entry.promo.code)}
+                />
+              </Row>
+            </Card>
+          ))}
+        </>
+      ) : null}
+    </BottomSheetModal>
+  );
+};
+
+/** A note the driver sees with the offer — a gate code, a door number. */
+const NoteSheet = ({
+  visible,
+  value,
+  onClose,
+  onSave,
+}: {
+  visible: boolean;
+  value: string;
+  onClose: () => void;
+  onSave: (next: string) => void;
+}): React.JSX.Element => {
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    if (visible) setDraft(value);
+  }, [visible, value]);
+
+  return (
+    <BottomSheetModal visible={visible} title="Note for your driver" onClose={onClose}>
+      <Field
+        label="What should they know?"
+        value={draft}
+        onChangeText={setDraft}
+        multiline
+        maxLength={300}
+        placeholder="I'm by the side entrance on Market Street."
+        hint="Your driver sees this when they get the ride."
+      />
+      <Button label="Save" onPress={() => onSave(draft)} />
+      {value.trim() ? (
+        <Button label="Remove note" variant="ghost" onPress={() => onSave('')} />
+      ) : null}
+    </BottomSheetModal>
+  );
+};
+
+/** What a class of service actually includes — pulled from the ride catalog. */
+const RideTypeInfo = ({
+  visible,
+  rideTypeId,
+  onClose,
+}: {
+  visible: boolean;
+  rideTypeId?: string;
+  onClose: () => void;
+}): React.JSX.Element => {
+  const { config } = useApp();
+  const rideType = config?.rideTypes.find((t) => t.id === rideTypeId);
+
+  return (
+    <BottomSheetModal visible={visible} title={rideType?.name ?? 'Ride type'} onClose={onClose}>
+      {rideType ? (
+        <Column gap="md">
+          <Row gap="md" align="center">
+            <Text style={{ fontSize: 36 }}>{rideType.icon}</Text>
+            <Column gap="xxs" style={{ flex: 1 }}>
+              <Text variant="heading">{rideType.name}</Text>
+              <Text variant="caption" color="secondary">
+                {rideType.tagline}
+              </Text>
+            </Column>
+          </Row>
+          <Divider />
+          <Text variant="body" color="secondary">
+            {rideType.description}
+          </Text>
+          <Row gap="sm" wrap>
+            <Badge label={`Up to ${rideType.maxPassengers} riders`} />
+            {rideType.shared ? <Badge label="Shared" tone="warning" /> : null}
+            {rideType.badge ? <Badge label={rideType.badge} tone="primary" /> : null}
+          </Row>
+        </Column>
+      ) : (
+        <Text variant="caption" color="muted">
+          That ride type is no longer offered.
+        </Text>
+      )}
+    </BottomSheetModal>
+  );
+};
 
 const PassengerStepper = ({
   value,
@@ -339,7 +887,6 @@ const PassengerStepper = ({
   value: number;
   onChange: (next: number) => void;
 }): React.JSX.Element => {
-  const theme = useTheme();
   const step = (delta: number): void => onChange(Math.max(1, Math.min(6, value + delta)));
 
   return (

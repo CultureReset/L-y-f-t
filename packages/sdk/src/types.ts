@@ -20,6 +20,7 @@ import type {
   Place,
   Position,
   HelpTopic,
+  PromoApplication,
   Ride,
   RideOffer,
   RiderProfile,
@@ -151,6 +152,10 @@ export interface QuoteResponse {
     readonly bounds: BoundingBox;
   };
   readonly quotes: readonly RideQuote[];
+  /** The promo that was applied, if a code was sent and accepted. */
+  readonly promo?: PromoApplication;
+  /** Why a code was not applied. The quote itself still succeeded. */
+  readonly promoError?: string;
 }
 
 export interface RideQuote {

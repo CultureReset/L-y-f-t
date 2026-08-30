@@ -40,6 +40,7 @@ import {
 } from '@lift/core';
 import { ApiError } from '@lift/sdk';
 import { useApp } from '../src/state/AppProvider.js';
+import { goBack } from '../src/navigation.js';
 
 /** Which of the three layers is on screen. */
 type View_ =
@@ -124,7 +125,7 @@ export default function Support(): React.JSX.Element {
   );
 
   const back = useCallback(() => {
-    if (view.kind === 'topics') router.back();
+    if (view.kind === 'topics') goBack('/account');
     else setView({ kind: 'topics' });
   }, [view]);
 

@@ -93,7 +93,7 @@ export default function Account(): React.JSX.Element {
 
         <Column gap="sm">
           <Text variant="heading">Saved places</Text>
-          {places.map((place) => (
+          {places.slice(0, 3).map((place) => (
             <Row key={place.id} justify="space-between">
               <Column gap="xxs" style={{ flex: 1 }}>
                 <Text variant="body">
@@ -103,17 +103,6 @@ export default function Account(): React.JSX.Element {
                   {place.place.address}
                 </Text>
               </Column>
-              <Pressable
-                onPress={() => {
-                  void client.removeSavedPlace(place.id).then(() => void load());
-                }}
-                accessibilityRole="button"
-                accessibilityLabel={`Remove ${place.label}`}
-              >
-                <Text variant="caption" color="danger">
-                  Remove
-                </Text>
-              </Pressable>
             </Row>
           ))}
           {places.length === 0 ? (
@@ -121,6 +110,11 @@ export default function Account(): React.JSX.Element {
               Save your home and work to book them in one tap.
             </Text>
           ) : null}
+          <Button
+            label={places.length === 0 ? 'Add a place' : 'Manage saved places'}
+            variant="ghost"
+            onPress={() => router.push('/places')}
+          />
         </Column>
 
         <Divider />

@@ -22,6 +22,7 @@ import type {
   Place,
   PlaceId,
   Position,
+  PromoRedemption,
   Ride,
   RideId,
   RideOffer,
@@ -209,6 +210,20 @@ export interface ChatRepository {
   markRead(rideId: RideId, reader: 'rider' | 'driver', at: number): Promise<void>;
 }
 
+// --------------------------------------------------------------- promos
+
+/**
+ * Redemptions only. The promo *definitions* are a catalog supplied through the
+ * container, exactly like ride types — what has to be persisted is who used
+ * what, because that is the only part a limit depends on.
+ */
+export interface PromoRepository {
+  record(redemption: PromoRedemption): Promise<PromoRedemption>;
+  countForRider(code: string, riderId: RiderId): Promise<number>;
+  countTotal(code: string): Promise<number>;
+  listForRider(riderId: RiderId): Promise<PromoRedemption[]>;
+}
+
 // ---------------------------------------------------------------- support
 
 export interface TicketQuery {
@@ -247,6 +262,7 @@ export interface Repositories {
   readonly paymentMethods: PaymentMethodRepository;
   readonly charges: ChargeRepository;
   readonly chat: ChatRepository;
+  readonly promos: PromoRepository;
   readonly support: SupportRepository;
   /** Release connections; a no-op for the in-memory store. */
   close(): Promise<void>;

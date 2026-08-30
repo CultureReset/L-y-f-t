@@ -8,7 +8,15 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+  TextInput,
+  View,
+} from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -19,9 +27,13 @@ import {
   Divider,
   DriverCard,
   FareSummary,
+  Field,
   ItineraryLines,
   MapView,
+  OptionRow,
   Row,
+  ScreenHeader,
+  Section,
   Sheet,
   Text,
   useCountdown,
@@ -51,6 +63,7 @@ export default function RideScreen(): React.JSX.Element {
 
   const [preview, setPreview] = useState<CancellationPreview>();
   const [cancelling, setCancelling] = useState(false);
+  const [cancelReasonOpen, setCancelReasonOpen] = useState(false);
 
   // Keep the cancellation cost current — it changes when the grace window ends.
   useEffect(() => {
@@ -66,33 +79,28 @@ export default function RideScreen(): React.JSX.Element {
     return () => clearInterval(timer);
   }, [client, ride]);
 
-  const cancel = useCallback(async () => {
-    if (!ride) return;
-    const fee = preview && !preview.waived ? formatMoney(preview.fee as never) : undefined;
-
-    const doCancel = async (): Promise<void> => {
+  /**
+   * Cancelling asks *why*. The reason decides whether a fee is charged — a
+   * driver who never moved is not a change of mind — and it is the only
+   * signal the platform gets about a bad match, so guessing on the rider's
+   * behalf throws that away.
+   */
+  const cancel = useCallback(
+    async (reason: CancelReason, note?: string): Promise<void> => {
+      if (!ride) return;
       setCancelling(true);
       try {
-        await client.cancelRide(ride.id, { reason: 'rider_changed_mind' });
+        await client.cancelRide(ride.id, { reason, ...(note ? { note } : {}) });
+        setCancelReasonOpen(false);
         router.replace('/home');
       } catch (e) {
         Alert.alert('Could not cancel', e instanceof ApiError ? e.userMessage : 'Try again.');
       } finally {
         setCancelling(false);
       }
-    };
-
-    Alert.alert(
-      'Cancel this ride?',
-      fee
-        ? `Your driver is already on the way, so a ${fee} cancellation fee applies.`
-        : preview?.explanation ?? 'You will not be charged.',
-      [
-        { text: 'Keep my ride', style: 'cancel' },
-        { text: 'Cancel ride', style: 'destructive', onPress: () => void doCancel() },
-      ],
-    );
-  }, [client, ride, preview]);
+    },
+    [client, ride],
+  );
 
   const markers = useMemo<MapMarker[]>(() => {
     if (!ride) return [];
@@ -202,7 +210,7 @@ export default function RideScreen(): React.JSX.Element {
       <Sheet style={{ paddingBottom: insets.bottom + theme.spacing.lg, maxHeight: '72%' }}>
         <ScrollView showsVerticalScrollIndicator={false}>
           {ride.status === 'requested' ? (
-            <SearchingPanel ride={ride} onCancel={() => void cancel()} cancelling={cancelling} />
+            <SearchingPanel ride={ride} onCancel={() => setCancelReasonOpen(true)} cancelling={cancelling} />
           ) : null}
 
           {(ride.status === 'accepted' || ride.status === 'arrived') && driver ? (
@@ -213,7 +221,7 @@ export default function RideScreen(): React.JSX.Element {
               driverAvatar={driver.avatarUrl}
               vehicle={vehicle}
               preview={preview}
-              onCancel={() => void cancel()}
+              onCancel={() => setCancelReasonOpen(true)}
               cancelling={cancelling}
               onMessage={() => router.push(`/ride/${ride.id}/chat` as never)}
             />
@@ -244,6 +252,14 @@ export default function RideScreen(): React.JSX.Element {
           ) : null}
         </ScrollView>
       </Sheet>
+
+      <CancelReasonSheet
+        visible={cancelReasonOpen}
+        preview={preview}
+        busy={cancelling}
+        onClose={() => setCancelReasonOpen(false)}
+        onConfirm={(reason, note) => void cancel(reason, note)}
+      />
     </View>
   );
 }
@@ -576,5 +592,128 @@ const CompletedPanel = ({
         loading={submitting}
       />
     </Column>
+  );
+};
+
+/** The reasons the API accepts. Kept in one place so the copy and the wire
+ *  value cannot drift apart. */
+type CancelReason =
+  | 'rider_changed_mind'
+  | 'rider_wait_too_long'
+  | 'rider_wrong_address'
+  | 'driver_no_show'
+  | 'safety_concern'
+  | 'other';
+
+const CANCEL_REASONS: readonly { value: CancelReason; label: string; description: string }[] = [
+  {
+    value: 'rider_changed_mind',
+    label: 'I changed my mind',
+    description: 'No longer need this trip.',
+  },
+  {
+    value: 'rider_wait_too_long',
+    label: 'The wait was too long',
+    description: 'The ETA kept growing or the driver was not moving.',
+  },
+  {
+    value: 'rider_wrong_address',
+    label: 'I set the wrong address',
+    description: 'The pickup or destination was not right.',
+  },
+  {
+    value: 'driver_no_show',
+    label: 'The driver never arrived',
+    description: "They were marked as here but weren't.",
+  },
+  {
+    value: 'safety_concern',
+    label: 'Something felt unsafe',
+    description: 'This is reviewed by our safety team.',
+  },
+  { value: 'other', label: 'Another reason', description: '' },
+];
+
+const CancelReasonSheet = ({
+  visible,
+  preview,
+  busy,
+  onClose,
+  onConfirm,
+}: {
+  visible: boolean;
+  preview?: CancellationPreview;
+  busy: boolean;
+  onClose: () => void;
+  onConfirm: (reason: CancelReason, note?: string) => void;
+}): React.JSX.Element => {
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const [reason, setReason] = useState<CancelReason>('rider_changed_mind');
+  const [note, setNote] = useState('');
+
+  const fee = preview && !preview.waived ? formatMoney(preview.fee as never) : undefined;
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable
+        onPress={onClose}
+        accessibilityLabel="Keep my ride"
+        style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }}
+      />
+      <View
+        style={{
+          backgroundColor: theme.colors.background,
+          borderTopLeftRadius: theme.radius.xl,
+          borderTopRightRadius: theme.radius.xl,
+          paddingBottom: insets.bottom + theme.spacing.lg,
+          maxHeight: '80%',
+        }}
+      >
+        <ScreenHeader title="Cancel this ride?" onBack={onClose} />
+        <ScrollView
+          contentContainerStyle={{ padding: theme.spacing.lg, gap: theme.spacing.md }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* The fee is stated before the choice, not after it. */}
+          <Text variant="caption" color={fee ? 'danger' : 'muted'}>
+            {fee
+              ? `A ${fee} cancellation fee applies — your driver is already on the way.`
+              : (preview?.explanation ?? 'You will not be charged.')}
+          </Text>
+
+          <Section title="Why are you cancelling?">
+            {CANCEL_REASONS.map((option) => (
+              <OptionRow
+                key={option.value}
+                label={option.label}
+                {...(option.description ? { description: option.description } : {})}
+                selected={reason === option.value}
+                onSelect={() => setReason(option.value)}
+              />
+            ))}
+          </Section>
+
+          {reason === 'other' || reason === 'safety_concern' ? (
+            <Field
+              label="Tell us more"
+              value={note}
+              onChangeText={setNote}
+              multiline
+              maxLength={300}
+              placeholder="What happened?"
+            />
+          ) : null}
+
+          <Button
+            label="Cancel my ride"
+            variant="danger"
+            onPress={() => onConfirm(reason, note.trim() || undefined)}
+            loading={busy}
+          />
+          <Button label="Keep my ride" variant="ghost" onPress={onClose} />
+        </ScrollView>
+      </View>
+    </Modal>
   );
 };

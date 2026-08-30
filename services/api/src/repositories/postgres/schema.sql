@@ -191,3 +191,15 @@ CREATE INDEX IF NOT EXISTS support_requester_idx ON support_tickets(requester_id
 CREATE INDEX IF NOT EXISTS support_ride_idx ON support_tickets(ride_id);
 -- An agent working the queue: open tickets, highest priority first.
 CREATE INDEX IF NOT EXISTS support_queue_idx ON support_tickets(status, priority, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS promo_redemptions (
+  id            BIGSERIAL PRIMARY KEY,
+  code          TEXT NOT NULL,
+  rider_id      TEXT NOT NULL,
+  ride_id       TEXT,
+  redeemed_at   BIGINT NOT NULL
+);
+-- Both limit checks are indexed: per rider, and across everyone.
+CREATE INDEX IF NOT EXISTS promo_rider_idx ON promo_redemptions(code, rider_id);
+CREATE INDEX IF NOT EXISTS promo_code_idx ON promo_redemptions(code);
+CREATE INDEX IF NOT EXISTS promo_rider_all_idx ON promo_redemptions(rider_id, redeemed_at DESC);

@@ -30,6 +30,7 @@ import {
 } from '@lift/core';
 import { ApiError } from '@lift/sdk';
 import { useApp } from '../../src/state/AppProvider.js';
+import { goBack } from '../../src/navigation.js';
 
 export default function Ticket(): React.JSX.Element {
   const theme = useTheme();
@@ -120,8 +121,12 @@ export default function Ticket(): React.JSX.Element {
     >
       <ScreenHeader
         title={ticket.subject}
-        subtitle={ticketStatusLabel(ticket.status)}
-        onBack={() => router.back()}
+        // The status lives in the badge on the right; repeating it as a
+        // subtitle just says the same word twice.
+        {...(ticket.rideId
+          ? { subtitle: `Trip ${ticket.rideId.slice(-6).toUpperCase()}` }
+          : {})}
+        onBack={() => goBack('/support')}
         trailing={
           <Badge
             label={ticketStatusLabel(ticket.status)}

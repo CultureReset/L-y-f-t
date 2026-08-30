@@ -31,6 +31,7 @@ import {
   type Place,
   type PlaceId,
   type Position,
+  type PromoRedemption,
   type Ride,
   type RideId,
   type RideOffer,
@@ -52,6 +53,7 @@ import type {
   DriverRepository,
   OfferRepository,
   PaymentMethodRepository,
+  PromoRepository,
   Repositories,
   RideQuery,
   RideRepository,
@@ -620,6 +622,27 @@ class MemoryChatRepository implements ChatRepository {
  * codes, pending offers — must agree with whatever clock the rest of the
  * platform is running on, including a hand-driven one in tests.
  */
+class MemoryPromoRepository implements PromoRepository {
+  private readonly redemptions: PromoRedemption[] = [];
+
+  async record(redemption: PromoRedemption): Promise<PromoRedemption> {
+    this.redemptions.push(redemption);
+    return redemption;
+  }
+
+  async countForRider(code: string, riderId: RiderId): Promise<number> {
+    return this.redemptions.filter((r) => r.code === code && r.riderId === riderId).length;
+  }
+
+  async countTotal(code: string): Promise<number> {
+    return this.redemptions.filter((r) => r.code === code).length;
+  }
+
+  async listForRider(riderId: RiderId): Promise<PromoRedemption[]> {
+    return this.redemptions.filter((r) => r.riderId === riderId);
+  }
+}
+
 class MemorySupportRepository implements SupportRepository {
   private readonly byId = new Map<TicketId, SupportTicket>();
 
@@ -681,6 +704,7 @@ export const createMemoryRepositories = (clock: Clock = systemClock): Repositori
     paymentMethods: new MemoryPaymentMethodRepository(),
     charges,
     chat: new MemoryChatRepository(),
+    promos: new MemoryPromoRepository(),
     support: new MemorySupportRepository(),
     close: async () => {},
   };
