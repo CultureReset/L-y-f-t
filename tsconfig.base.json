@@ -1,7 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022"
+    ],
     "module": "ES2022",
     "moduleResolution": "Bundler",
     "resolveJsonModule": true,
@@ -14,12 +16,29 @@
     "noFallthroughCasesInSwitch": true,
     "exactOptionalPropertyTypes": false,
     "skipLibCheck": true,
-    "declaration": true,
-    "declarationMap": true,
     "sourceMap": true,
-    "composite": true,
     "isolatedModules": true,
-    "verbatimModuleSyntax": false
+    "verbatimModuleSyntax": false,
+    "baseUrl": ".",
+    "paths": {
+      "@lift/core": [
+        "packages/core/src/index.ts"
+      ],
+      "@lift/geo": [
+        "packages/geo/src/index.ts"
+      ],
+      "@lift/sdk": [
+        "packages/sdk/src/index.ts"
+      ],
+      "@lift/ui": [
+        "packages/ui/src/index.ts"
+      ]
+    },
+    "noEmit": true
   },
-  "exclude": ["node_modules", "dist", "build"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build"
+  ]
 }

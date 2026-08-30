@@ -2,7 +2,7 @@
   "name": "lift-platform",
   "private": true,
   "version": "1.0.0",
-  "description": "L-Y-F-T — a modular, end-to-end ridehail platform: rider app, driver app, dispatch backend, ops console, and fleet simulator.",
+  "description": "L-Y-F-T \u2014 a modular, end-to-end ridehail platform: rider app, driver app, dispatch backend, ops console, and fleet simulator.",
   "workspaces": [
     "packages/*",
     "services/*",
@@ -13,8 +13,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
-    "typecheck": "tsc -b packages/core packages/geo packages/sdk services/api tools/simulator",
+    "build": "npm run typecheck && npm run test",
+    "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint . --ext .ts,.tsx",
