@@ -177,21 +177,26 @@ export const withCache = (
     return value;
   };
 
+  // Methods are rebound explicitly rather than spread: a provider is usually a
+  // class instance, and spreading one drops everything on its prototype.
   return {
-    ...provider,
     id: provider.id,
     capabilities: provider.capabilities,
     autocomplete: provider.autocomplete
       ? (q) => memo(`ac:${JSON.stringify(q)}`, () => provider.autocomplete!(q))
       : undefined,
+    details: provider.details ? (ref) => provider.details!(ref) : undefined,
     geocode: provider.geocode
       ? (q) => memo(`gc:${JSON.stringify(q)}`, () => provider.geocode!(q))
       : undefined,
     reverseGeocode: provider.reverseGeocode
       ? (c) => memo(`rg:${c.lat.toFixed(5)},${c.lng.toFixed(5)}`, () => provider.reverseGeocode!(c))
       : undefined,
+    // Routes are never cached: a live route depends on the driver's position.
+    route: provider.route ? (r) => provider.route!(r) : undefined,
     matrix: provider.matrix
       ? (r) => memo(`mx:${JSON.stringify(r)}`, () => provider.matrix!(r))
       : undefined,
+    tiles: provider.tiles ? () => provider.tiles!() : undefined,
   };
 };

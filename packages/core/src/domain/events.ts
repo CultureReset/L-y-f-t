@@ -15,7 +15,7 @@ import type { FareBreakdown } from '../pricing/types.js';
 import type { Charge } from './payment.js';
 import type { DriverAvailability } from './driver.js';
 
-export interface PlatformEvents {
+export type PlatformEvents = {
   'ride.created': { ride: Ride };
   'ride.requested': { ride: Ride };
   'ride.status_changed': {
@@ -54,6 +54,8 @@ export interface PlatformEvents {
   'chat.message': {
     rideId: RideId;
     from: 'rider' | 'driver';
+    riderId: RiderId;
+    driverId: DriverId;
     text: string;
     at: number;
   };
@@ -67,7 +69,7 @@ export interface PlatformEvents {
 
   'rider.registered': { riderId: RiderId };
   'driver.registered': { driverId: DriverId };
-}
+};
 
 export type PlatformEventName = keyof PlatformEvents;
 
