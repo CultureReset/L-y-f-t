@@ -212,7 +212,8 @@ export class LiftClient {
   async verifyCode(input: {
     phone: string;
     code: string;
-    role?: 'rider' | 'driver';
+    /** `admin` succeeds only for an account that already holds the role. */
+    role?: 'rider' | 'driver' | 'admin';
     firstName?: string;
     lastName?: string;
     email?: string;
@@ -226,7 +227,7 @@ export class LiftClient {
     return this.get('/v1/auth/me');
   }
 
-  async switchRole(role: 'rider' | 'driver'): Promise<AuthSession> {
+  async switchRole(role: 'rider' | 'driver' | 'admin'): Promise<AuthSession> {
     const session = await this.post<AuthSession>('/v1/auth/role', { role });
     this.setToken(session.token);
     return session;

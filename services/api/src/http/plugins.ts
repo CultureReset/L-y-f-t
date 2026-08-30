@@ -146,11 +146,23 @@ export const parse = <S extends ZodTypeAny>(schema: S, value: unknown): ZodOutpu
  * otherwise be abusable — sending SMS codes above all. A real deployment
  * should put this in shared storage rather than process memory.
  */
-export const rateLimit = (options: { windowMs: number; max: number }) => {
+export interface RateLimitOptions {
+  readonly windowMs: number;
+  readonly max: number;
+  /**
+   * What to count per. Defaults to the client address; an SMS endpoint should
+   * count per phone number instead, so one office behind a single NAT — or one
+   * simulated fleet — does not lock everyone out.
+   */
+  readonly keyBy?: (request: FastifyRequest) => string;
+}
+
+export const rateLimit = (options: RateLimitOptions) => {
   const hits = new Map<string, { count: number; resetAt: number }>();
 
   return async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
-    const key = `${request.routeOptions?.url ?? request.url}:${request.ip}`;
+    const subject = options.keyBy?.(request) ?? request.ip;
+    const key = `${request.routeOptions?.url ?? request.url}:${subject}`;
     const now = Date.now();
     const entry = hits.get(key);
 

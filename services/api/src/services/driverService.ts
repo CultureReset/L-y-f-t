@@ -8,6 +8,7 @@ import {
   AppError,
   canGoOnline,
   missingDocuments,
+  REQUIRED_DOCUMENTS,
   newVehicleId,
   vehicleQualifies,
   zero,
@@ -356,11 +357,23 @@ export class DriverService {
     ];
     const updated = await this.deps.drivers.update(driverId, { documents });
 
-    // Once nothing is outstanding, move the driver into review automatically.
-    if (
-      updated.approvalStatus === 'incomplete' &&
-      missingDocuments(updated, this.deps.clock.now()).length === 0
-    ) {
+    // "Everything is submitted" is not the same as "everything is approved":
+    // missingDocuments() asks the latter, which is the right question for going
+    // online and the wrong one for deciding that review can begin.
+    const awaitingSubmission = REQUIRED_DOCUMENTS.filter(
+      (type) => !documents.some((d) => d.type === type && d.status !== 'rejected'),
+    );
+    if (awaitingSubmission.length > 0) return updated;
+
+    // Development and staging approve straight away so a driver can get on the
+    // road; production leaves them in review for a human.
+    if (this.deps.config.features.autoApproveDrivers) {
+      return this.deps.drivers.update(driverId, {
+        approvalStatus: 'approved',
+        documents: documents.map((d) => ({ ...d, status: 'approved' as const })),
+      });
+    }
+    if (updated.approvalStatus === 'incomplete') {
       return this.deps.drivers.update(driverId, { approvalStatus: 'pending_review' });
     }
     return updated;

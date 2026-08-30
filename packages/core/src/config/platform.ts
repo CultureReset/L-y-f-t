@@ -102,6 +102,13 @@ export const platformConfigSchema = z.object({
       driverDestinationFilter: z.boolean().default(true),
       surgeHeatmap: z.boolean().default(true),
       safetyToolkit: z.boolean().default(true),
+      /**
+       * Approve a driver as soon as every required document is submitted,
+       * instead of waiting for an operator. Intended for development, staging,
+       * and the fleet simulator — a production market should leave this off and
+       * review drivers properly.
+       */
+      autoApproveDrivers: z.boolean().default(false),
     })
     .default({}),
 });

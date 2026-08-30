@@ -41,6 +41,7 @@ export interface SeedSummary {
   readonly riders: number;
   readonly demoRiderPhone: string;
   readonly demoDriverPhone: string;
+  readonly demoAdminPhone: string;
 }
 
 const FIRST_NAMES = [
@@ -86,8 +87,23 @@ export const seedDemoData = async (
       riders: 0,
       demoRiderPhone: DEMO_RIDER_PHONE,
       demoDriverPhone: DEMO_DRIVER_PHONE,
+      demoAdminPhone: DEMO_ADMIN_PHONE,
     };
   }
+
+  // ---------------------------------------------------------- the operator
+  // Seeded so the ops console works on a fresh clone. Seeding is off in
+  // production, so this is not a way into a real deployment.
+  await container.repositories.users.create({
+    id: newUserId(),
+    phone: DEMO_ADMIN_PHONE,
+    firstName: 'Ops',
+    lastName: 'Console',
+    roles: ['admin', 'rider'],
+    locale: container.config.market.locale,
+    currency: container.config.market.currency,
+    createdAt: now - 200 * 86_400_000,
+  });
 
   // ------------------------------------------------------------- the rider
   const riderUser = await container.repositories.users.create({
@@ -253,10 +269,12 @@ export const seedDemoData = async (
     riders: 1,
     demoRiderPhone: DEMO_RIDER_PHONE,
     demoDriverPhone: DEMO_DRIVER_PHONE,
+    demoAdminPhone: DEMO_ADMIN_PHONE,
   };
 };
 
 export const DEMO_RIDER_PHONE = '+14155550100';
+export const DEMO_ADMIN_PHONE = '+14155550000';
 export const DEMO_DRIVER_PHONE = '+14155550199';
 
 const APPROVED_DOCUMENTS: DriverProfile['documents'] = [

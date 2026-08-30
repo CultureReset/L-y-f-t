@@ -159,6 +159,15 @@ export class AuthService {
     const existing = await this.deps.users.findByPhone(normalized);
     const isNewUser = existing === undefined;
 
+    // `ensureRole` guards operator access for an existing account, but account
+    // creation would otherwise take the requested role at face value — signing
+    // in with an unknown number and role=admin must not mint an operator.
+    if (isNewUser && role === 'admin') {
+      throw new AppError('forbidden', 'Operator accounts cannot be self-registered', {
+        userMessage: 'That account does not have operator access.',
+      });
+    }
+
     const user = existing
       ? await this.ensureRole(existing, role)
       : await this.createUser({ ...input, phone: normalized, role });
@@ -255,6 +264,14 @@ export class AuthService {
       throw new AppError('forbidden', 'This account is disabled');
     }
     if (user.roles.includes(role)) return user;
+
+    // Rider and driver are self-serve; operator access never is. Signing in
+    // must not be able to hand anyone the admin role.
+    if (role === 'admin') {
+      throw new AppError('forbidden', 'This account is not an operator', {
+        userMessage: 'That account does not have operator access.',
+      });
+    }
     return this.deps.users.update(user.id, { roles: [...user.roles, role] });
   }
 

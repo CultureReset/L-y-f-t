@@ -17,7 +17,7 @@ import {
   signIn,
   type Harness,
 } from './testing/harness.js';
-import { DEMO_DRIVER_PHONE, DEMO_RIDER_PHONE } from './seed.js';
+import { DEMO_ADMIN_PHONE, DEMO_DRIVER_PHONE, DEMO_RIDER_PHONE } from './seed.js';
 
 let harness: Harness;
 
@@ -926,6 +926,144 @@ describe('notifications', () => {
     // The offer push must reach the driver, not the rider.
     const offerPush = harness.push.sent.find((m) => m.title.startsWith('New ride'));
     expect(offerPush!.to.kind).toBe('driver');
+  });
+});
+
+describe('operator access', () => {
+  it('refuses an admin session to an account without the role', async () => {
+    await harness.app.inject({
+      method: 'POST',
+      url: '/v1/auth/code',
+      payload: { phone: '+14155554321' },
+    });
+    const response = await harness.app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify',
+      payload: { phone: '+14155554321', code: '000000', role: 'admin' },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error.userMessage).toMatch(/operator access/i);
+  });
+
+  it('never grants the admin role by signing in', async () => {
+    const { token } = await signIn(harness, '+14155554322', 'rider');
+    const me = (await asUser(harness, token).get('/v1/auth/me')).json();
+    expect(me.user.roles).not.toContain('admin');
+
+    const escalate = await asUser(harness, token).post('/v1/auth/role', { role: 'admin' });
+    expect(escalate.statusCode).toBe(403);
+  });
+
+  it('refuses ops endpoints to a rider', async () => {
+    const { token } = await signIn(harness, DEMO_RIDER_PHONE);
+    expect((await asUser(harness, token).get('/v1/admin/overview')).statusCode).toBe(403);
+    expect((await asUser(harness, token).get('/v1/admin/drivers')).statusCode).toBe(403);
+  });
+
+  it('serves the ops console to the seeded operator', async () => {
+    const { token } = await signIn(harness, DEMO_ADMIN_PHONE, 'admin');
+    const admin = asUser(harness, token);
+
+    const overview = (await admin.get('/v1/admin/overview')).json();
+    expect(overview.fleet).toBeDefined();
+    expect(overview.config.dispatchStrategy).toBe('scored');
+
+    const drivers = (await admin.get('/v1/admin/drivers')).json();
+    expect(drivers.drivers.length).toBeGreaterThan(0);
+    expect(drivers.drivers[0]).toHaveProperty('availability');
+  });
+
+  it('exposes dispatch diagnostics for a ride, including why drivers were skipped', async () => {
+    const riderToken = (await signIn(harness, DEMO_RIDER_PHONE)).token;
+    const { rideId } = await bookStandardRide(harness, riderToken);
+
+    const { token } = await signIn(harness, DEMO_ADMIN_PHONE, 'admin');
+    const detail = (await asUser(harness, token).get(`/v1/admin/rides/${rideId}`)).json();
+
+    expect(detail.ride.id).toBe(rideId);
+    expect(detail.timeline.length).toBeGreaterThan(0);
+    expect(detail.offers.length).toBeGreaterThan(0);
+    expect(detail.dispatch).toMatchObject({
+      offersSent: expect.any(Number),
+      candidatesConsidered: expect.any(Number),
+    });
+  });
+
+  it('lets an operator cancel a ride on the rider’s behalf, with no fee', async () => {
+    const riderToken = (await signIn(harness, DEMO_RIDER_PHONE)).token;
+    const { rideId } = await bookStandardRide(harness, riderToken);
+    const { token } = await signIn(harness, DEMO_ADMIN_PHONE, 'admin');
+
+    const cancelled = (
+      await asUser(harness, token).post(`/v1/admin/rides/${rideId}/cancel`, {
+        note: 'Support request',
+      })
+    ).json();
+    expect(cancelled.ride.status).toBe('cancelled');
+    expect(cancelled.ride.cancellation.feeWaived).toBe(true);
+  });
+
+  it('lets an operator suspend a driver, taking them off the road immediately', async () => {
+    const { token } = await signIn(harness, DEMO_ADMIN_PHONE, 'admin');
+    const admin = asUser(harness, token);
+    const drivers = (await admin.get('/v1/admin/drivers')).json();
+    const target = drivers.drivers.find(
+      (d: { availability: string }) => d.availability === 'available',
+    );
+
+    const suspended = (
+      await admin.post(`/v1/admin/drivers/${target.driverId}/approval`, {
+        status: 'suspended',
+      })
+    ).json();
+    expect(suspended.driver.approvalStatus).toBe('suspended');
+    expect(suspended.driver.availability).toBe('offline');
+  });
+});
+
+describe('driver auto-approval', () => {
+  it('leaves a driver in review when auto-approval is off', async () => {
+    const { token } = await signIn(harness, '+14155556100', 'driver');
+    const driver = asUser(harness, token);
+    await driver.post('/v1/driver/vehicles', {
+      make: 'Toyota', model: 'Camry', year: 2022, color: 'silver',
+      licensePlate: '9REV111', seats: 4, features: [],
+    });
+    for (const type of [
+      'drivers_license', 'vehicle_registration', 'insurance',
+      'background_check', 'profile_photo',
+    ]) {
+      await driver.post('/v1/driver/documents', { type });
+    }
+    const status = (await driver.get('/v1/driver/status')).json();
+    expect(status.profile.approvalStatus).toBe('pending_review');
+    expect(status.canGoOnline).toBe(false);
+  });
+
+  it('approves a driver once every document is in, when the flag is on', async () => {
+    const auto = await createHarness({
+      config: { features: { autoApproveDrivers: true } },
+      seed: false,
+    });
+    try {
+      const { token } = await signIn(auto, '+14155556101', 'driver');
+      const driver = asUser(auto, token);
+      await driver.post('/v1/driver/vehicles', {
+        make: 'Toyota', model: 'Camry', year: 2022, color: 'silver',
+        licensePlate: '9AUT111', seats: 4, features: [],
+      });
+      for (const type of [
+        'drivers_license', 'vehicle_registration', 'insurance',
+        'background_check', 'profile_photo',
+      ]) {
+        await driver.post('/v1/driver/documents', { type });
+      }
+      const status = (await driver.get('/v1/driver/status')).json();
+      expect(status.profile.approvalStatus).toBe('approved');
+      expect(status.canGoOnline).toBe(true);
+    } finally {
+      await auto.close();
+    }
   });
 });
 

@@ -103,7 +103,7 @@ export const createHarness = async (options: HarnessOptions = {}): Promise<Harne
 export const signIn = async (
   harness: Harness,
   phone: string,
-  role: 'rider' | 'driver' = 'rider',
+  role: 'rider' | 'driver' | 'admin' = 'rider',
   extra: { firstName?: string; lastName?: string } = {},
 ): Promise<{ token: string; riderId?: string; driverId?: string }> => {
   await harness.app.inject({ method: 'POST', url: '/v1/auth/code', payload: { phone } });

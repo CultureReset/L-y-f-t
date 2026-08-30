@@ -70,8 +70,9 @@ export const loadServerConfig = (): ServerConfig => {
 };
 
 /** Build the domain-level platform config from the environment. */
-export const loadConfigFromEnv = (): PlatformConfig =>
-  loadPlatformConfig({
+export const loadConfigFromEnv = (): PlatformConfig => {
+  const nodeEnv = str('NODE_ENV', 'development');
+  return loadPlatformConfig({
     brandName: str('BRAND_NAME', 'Lyft Clone'),
     market: {
       id: str('MARKET_ID', 'default'),
@@ -130,5 +131,9 @@ export const loadConfigFromEnv = (): PlatformConfig =>
       driverDestinationFilter: bool('FEATURE_DESTINATION_FILTER', true),
       surgeHeatmap: bool('FEATURE_SURGE_HEATMAP', true),
       safetyToolkit: bool('FEATURE_SAFETY_TOOLKIT', true),
+      // On outside production so a fresh clone — and the simulator — can put
+      // drivers on the road without an operator in the loop.
+      autoApproveDrivers: bool('AUTO_APPROVE_DRIVERS', nodeEnv !== 'production'),
     },
   });
+};

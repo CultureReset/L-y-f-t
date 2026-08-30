@@ -15,17 +15,30 @@ const requestCodeSchema = z.object({
 const verifySchema = z.object({
   phone: z.string().min(5).max(24),
   code: z.string().min(4).max(8),
-  role: z.enum(['rider', 'driver']).default('rider'),
+  role: z.enum(['rider', 'driver', 'admin']).default('rider'),
   firstName: z.string().min(1).max(60).optional(),
   lastName: z.string().max(60).optional(),
   email: z.string().email().optional(),
 });
 
 export const registerAuthRoutes = (app: FastifyInstance, container: Container): void => {
-  /** Send a one-time code. Rate limited — this endpoint sends real SMS. */
+  /**
+   * Send a one-time code. Limited per phone number rather than per address:
+   * the cost being protected is SMS spend on one number, and an address-based
+   * limit locks out everyone sharing a NAT.
+   */
   app.post(
     '/auth/code',
-    { preHandler: rateLimit({ windowMs: 60_000, max: 5 }) },
+    {
+      preHandler: rateLimit({
+        windowMs: 60_000,
+        max: 5,
+        keyBy: (request) => {
+          const body = request.body as { phone?: unknown } | undefined;
+          return typeof body?.phone === 'string' ? normalizePhoneKey(body.phone) : request.ip;
+        },
+      }),
+    },
     async (request) => {
       const { phone } = parse(requestCodeSchema, request.body);
       return container.auth.requestCode(phone);
@@ -35,7 +48,16 @@ export const registerAuthRoutes = (app: FastifyInstance, container: Container): 
   /** Verify a code and receive a session token. */
   app.post(
     '/auth/verify',
-    { preHandler: rateLimit({ windowMs: 60_000, max: 10 }) },
+    {
+      preHandler: rateLimit({
+        windowMs: 60_000,
+        max: 10,
+        keyBy: (request) => {
+          const body = request.body as { phone?: unknown } | undefined;
+          return typeof body?.phone === 'string' ? normalizePhoneKey(body.phone) : request.ip;
+        },
+      }),
+    },
     async (request) => {
       const input = parse(verifySchema, request.body);
       const result = await container.auth.verifyCode(input);
@@ -73,7 +95,10 @@ export const registerAuthRoutes = (app: FastifyInstance, container: Container): 
   /** Switch between riding and driving on the same account. */
   app.post('/auth/role', async (request) => {
     const actor = requireActor(request);
-    const { role } = parse(z.object({ role: z.enum(['rider', 'driver']) }), request.body);
+    const { role } = parse(
+      z.object({ role: z.enum(['rider', 'driver', 'admin']) }),
+      request.body,
+    );
     const result = await container.auth.switchRole(actor.token, role as UserRole);
     return {
       token: result.token,
@@ -114,6 +139,9 @@ export const registerAuthRoutes = (app: FastifyInstance, container: Container): 
     return { user: presentUser(user) };
   });
 };
+
+/** Digits only, so formatting variants share one bucket. */
+const normalizePhoneKey = (phone: string): string => phone.replace(/[^\d]/g, '');
 
 const presentUser = (user: {
   id: string;
