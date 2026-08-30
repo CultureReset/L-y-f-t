@@ -6,8 +6,13 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
+  AppError,
   DRIVER_DOCUMENT_TYPES,
+  currentLeg,
+  disputableRatings,
   driverPreferencesSchema,
+  money,
+  summarizeRatings,
   positionSchema,
   vehicleSchema,
   type OfferId,
@@ -16,7 +21,7 @@ import {
   type VehicleId,
 } from '@lift/core';
 import type { Container } from '../../container.js';
-import { parse, requireDriver } from '../plugins.js';
+import { parse, rateLimit, requireDriver } from '../plugins.js';
 
 export const registerDriverRoutes = (app: FastifyInstance, container: Container): void => {
   /** Everything the driver home screen needs, in one call. */
@@ -149,6 +154,70 @@ export const registerDriverRoutes = (app: FastifyInstance, container: Container)
       request.body,
     );
     return { ride: await container.rides.refreshRoute(rideId as RideId, from) };
+  });
+
+  /**
+   * Turn-by-turn for the leg the driver is on now.
+   *
+   * Computed on demand rather than stored with the ride: steps are large, they
+   * go stale the moment the driver deviates, and the app asks for them again
+   * anyway. `from` lets the app re-route from where it actually is.
+   */
+  app.get('/driver/rides/:rideId/navigation', async (request) => {
+    const driverId = requireDriver(request);
+    const { rideId } = parse(z.object({ rideId: z.string() }), request.params);
+    const query = parse(
+      z.object({ lat: z.coerce.number().optional(), lng: z.coerce.number().optional() }),
+      request.query,
+    );
+
+    const ride = await container.rides.getRide(rideId as RideId);
+    // Both sides must be defined: an unassigned ride must not be navigable by
+    // whoever asks first.
+    if (ride.assignment === undefined || ride.assignment.driverId !== driverId) {
+      throw new AppError('forbidden', 'That ride is not yours');
+    }
+
+    const leg = currentLeg(ride);
+    if (!leg) return { steps: [], leg: null };
+
+    const from =
+      query.lat !== undefined && query.lng !== undefined
+        ? { lat: query.lat, lng: query.lng }
+        : leg.from;
+
+    if (!container.geo.route) {
+      throw new AppError('provider_unavailable', 'The configured geo provider cannot route', {
+        userMessage: 'Turn-by-turn is not available here. Use your own maps app.',
+      });
+    }
+
+    const route = await container.geo.route({
+      waypoints: [from, leg.to],
+      steps: true,
+    });
+
+    // Steps live on the route's legs; a single-waypoint-pair route has one.
+    const steps = route.legs.flatMap((routeLeg) => routeLeg.steps);
+
+    return {
+      leg: {
+        kind: leg.kind,
+        to: leg.to,
+        destinationName:
+          leg.kind === 'to_pickup'
+            ? ride.itinerary.pickup.name
+            : ride.itinerary.dropoff.name,
+        destinationAddress:
+          leg.kind === 'to_pickup'
+            ? ride.itinerary.pickup.address
+            : ride.itinerary.dropoff.address,
+      },
+      steps,
+      distanceMeters: route.distanceMeters,
+      durationMs: route.durationInTrafficMs ?? route.durationMs,
+      geometry: route.geometry,
+    };
   });
 
   app.post('/driver/rides/:rideId/rate', async (request) => {
@@ -290,6 +359,144 @@ export const registerDriverRoutes = (app: FastifyInstance, container: Container)
         rating: ride.driverRating?.stars,
       })),
     };
+  });
+
+  // ---------------------------------------------------------------- ratings
+
+  /**
+   * How the rating is made up. A driver can act on "three riders mentioned the
+   * route"; they cannot act on "4.87".
+   */
+  app.get('/driver/ratings', async (request) => {
+    const driverId = requireDriver(request);
+    const rides = await container.repositories.rides.query({
+      driverId,
+      statuses: ['completed'],
+      limit: 500,
+    });
+
+    const rated = rides
+      .filter((ride) => ride.driverRating !== undefined)
+      .map((ride) => ({
+        rideId: ride.id,
+        at: ride.driverRating!.submittedAt,
+        rating: ride.driverRating!,
+      }));
+
+    return {
+      breakdown: summarizeRatings(rated, { now: container.clock.now() }),
+      disputable: disputableRatings(rated).map((trip) => trip.rideId),
+      // Only ratings that came with something to read; a bare star is noise here.
+      comments: rated
+        .filter((trip) => (trip.rating.comment ?? '').trim().length > 0)
+        .sort((a, b) => b.at - a.at)
+        .slice(0, 20)
+        .map((trip) => ({
+          rideId: trip.rideId,
+          stars: trip.rating.stars,
+          comment: trip.rating.comment,
+          tags: trip.rating.tags,
+          at: trip.at,
+        })),
+    };
+  });
+
+  // ---------------------------------------------------------------- payouts
+
+  app.get('/driver/payouts', async (request) => {
+    const driverId = requireDriver(request);
+    const [balance, history, destinations] = await Promise.all([
+      container.payouts.balance(driverId),
+      container.payouts.history(driverId),
+      container.payouts.destinations(driverId),
+    ]);
+    return {
+      balance,
+      payouts: history,
+      // Never return the gateway token to a client.
+      destinations: destinations.map(({ gatewayToken: _omitted, ...safe }) => safe),
+      policy: container.payouts.policy,
+    };
+  });
+
+  /** Price a cash out without taking it — what the confirm sheet shows. */
+  app.post('/driver/payouts/quote', async (request) => {
+    const driverId = requireDriver(request);
+    const body = parse(z.object({ amount: z.number().int().min(1) }), request.body);
+    return {
+      quote: await container.payouts.quote(
+        driverId,
+        money(body.amount, container.config.market.currency),
+      ),
+    };
+  });
+
+  app.post(
+    '/driver/payouts/cashout',
+    {
+      // A double-tapped cash out must not become two.
+      preHandler: rateLimit({
+        windowMs: 30_000,
+        max: 2,
+        keyBy: (request) => request.actor?.driverId ?? request.ip,
+      }),
+    },
+    async (request) => {
+      const driverId = requireDriver(request);
+      const body = parse(z.object({ amount: z.number().int().min(1) }), request.body);
+      return {
+        payout: await container.payouts.cashOut(
+          driverId,
+          money(body.amount, container.config.market.currency),
+        ),
+      };
+    },
+  );
+
+  app.post('/driver/payouts/destinations', async (request) => {
+    const driverId = requireDriver(request);
+    const body = parse(
+      z.object({
+        label: z.string().min(1).max(60),
+        gatewayToken: z.string().max(200).optional(),
+        makeDefault: z.boolean().optional(),
+      }),
+      request.body,
+    );
+    const { gatewayToken: _omitted, ...destination } = await container.payouts.addDestination(
+      driverId,
+      body,
+    );
+    return { destination };
+  });
+
+  app.delete('/driver/payouts/destinations/:destinationId', async (request) => {
+    const driverId = requireDriver(request);
+    const { destinationId } = request.params as { destinationId: string };
+    await container.payouts.removeDestination(driverId, destinationId);
+    return { ok: true };
+  });
+
+  // ----------------------------------------------------------------- demand
+
+  /**
+   * Where the demand is. The same heat map the ops console sees, exposed to
+   * drivers because deciding where to sit is the main thing they do between
+   * trips — and hiding it only leaves them guessing.
+   */
+  app.get('/driver/demand', async (request) => {
+    requireDriver(request);
+    if (!container.surge.heatmap) return { cells: [], provider: container.surge.id };
+    const bounds = parse(
+      z.object({
+        south: z.coerce.number(),
+        west: z.coerce.number(),
+        north: z.coerce.number(),
+        east: z.coerce.number(),
+      }),
+      request.query,
+    );
+    return { cells: await container.surge.heatmap(bounds), provider: container.surge.id };
   });
 };
 

@@ -11,7 +11,15 @@
 
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { PanResponder, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-import Svg, { Circle, G, Line, Path, Polyline as SvgPolyline, Rect } from 'react-native-svg';
+import Svg, {
+  Circle,
+  G,
+  Line,
+  Path,
+  Polygon as SvgPolygon,
+  Polyline as SvgPolyline,
+  Rect,
+} from 'react-native-svg';
 import { decodePolyline, haversineMeters, type LatLng } from '@lift/core';
 import { useTheme } from '../theme/ThemeProvider.js';
 import type { MapProps } from './types.js';
@@ -27,6 +35,7 @@ export const MapCanvas = ({
   markers = [],
   polylines = [],
   circles = [],
+  polygons = [],
   fitTo,
   center,
   zoom,
@@ -59,13 +68,14 @@ export const MapCanvas = ({
     const points = fitTo ?? [
       ...markers.map((m) => m.coordinate),
       ...polylines.flatMap((p) => p.points),
+      ...polygons.flatMap((p) => p.points),
     ];
     const framed = viewportForPoints(points, size, {
       paddingPx: padding,
       ...(center ? { fallbackCenter: center } : {}),
     });
     return zoom !== undefined ? { ...framed, zoom } : framed;
-  }, [size, center, zoom, fitTo, markers, polylines, padding]);
+  }, [size, center, zoom, fitTo, markers, polylines, polygons, padding]);
 
   /** Apply an in-progress drag by shifting the centre. */
   const effectiveViewport: Viewport = useMemo(() => {
@@ -121,6 +131,27 @@ export const MapCanvas = ({
       {ready ? (
         <Svg width={size.width} height={size.height}>
           <GroundPlane viewport={effectiveViewport} theme={theme} />
+
+          {/* Areas go under everything else so a route stays readable. */}
+          {polygons.map((polygon) => {
+            if (polygon.points.length < 3) return null;
+            const pointString = polygon.points
+              .map((p) => {
+                const screen = toScreen(p, effectiveViewport);
+                return `${screen.x.toFixed(1)},${screen.y.toFixed(1)}`;
+              })
+              .join(' ');
+            return (
+              <SvgPolygon
+                key={polygon.id}
+                points={pointString}
+                fill={polygon.fill ?? theme.colors.primary}
+                fillOpacity={polygon.fillOpacity ?? 0.2}
+                stroke={polygon.stroke ?? 'none'}
+                strokeWidth={polygon.strokeWidth ?? 0}
+              />
+            );
+          })}
 
           {circles.map((circle) => {
             const point = toScreen(circle.center, effectiveViewport);

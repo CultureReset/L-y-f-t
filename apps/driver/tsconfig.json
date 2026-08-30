@@ -4,13 +4,28 @@
     "strict": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "@lift/core": ["../../packages/core/src/index.ts"],
-      "@lift/geo": ["../../packages/geo/src/index.ts"],
-      "@lift/sdk": ["../../packages/sdk/src/index.ts"],
-      "@lift/ui": ["../../packages/ui/src/index.ts"]
+      "@/*": [
+        "src/*"
+      ],
+      "@lift/core": [
+        "../../packages/core/src/index.ts"
+      ],
+      "@lift/geo": [
+        "../../packages/geo/src/index.ts"
+      ],
+      "@lift/sdk": [
+        "../../packages/sdk/src/index.ts"
+      ],
+      "@lift/ui": [
+        "../../packages/ui/src/index.ts"
+      ]
     }
   },
-  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

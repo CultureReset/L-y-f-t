@@ -144,6 +144,19 @@ export const pointAlongPath = (
   };
 };
 
+/**
+ * A square box of a given radius around a point — what a "what is near me"
+ * query needs. Built from `destination` so it is correct at any latitude
+ * rather than assuming a degree is the same distance everywhere.
+ */
+export const boundsAround = (center: LatLng, radiusMeters: number): BoundingBox => {
+  const north = destination(center, 0, radiusMeters);
+  const east = destination(center, 90, radiusMeters);
+  const south = destination(center, 180, radiusMeters);
+  const west = destination(center, 270, radiusMeters);
+  return { north: north.lat, south: south.lat, east: east.lng, west: west.lng };
+};
+
 export const boundsOf = (points: readonly LatLng[], paddingRatio = 0.15): BoundingBox => {
   if (points.length === 0) return { south: 0, west: 0, north: 0, east: 0 };
   let south = Infinity;

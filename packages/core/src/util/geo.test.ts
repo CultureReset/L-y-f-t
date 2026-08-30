@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   bearingDegrees,
+  boundsAround,
   boundsOf,
   cellKey,
   decodePolyline,
@@ -107,5 +108,25 @@ describe('geo', () => {
 
   it('converts units', () => {
     expect(metersToMiles(1609.344)).toBeCloseTo(1, 6);
+  });
+});
+
+describe('boundsAround', () => {
+  it('makes a box the requested distance in every direction', () => {
+    const centre = { lat: 37.7955, lng: -122.3937 };
+    const box = boundsAround(centre, 5_000);
+
+    // Each edge should be about 5km from the centre, at this latitude.
+    expect(haversineMeters(centre, { lat: box.north, lng: centre.lng })).toBeCloseTo(5_000, -1);
+    expect(haversineMeters(centre, { lat: box.south, lng: centre.lng })).toBeCloseTo(5_000, -1);
+    expect(haversineMeters(centre, { lat: centre.lat, lng: box.east })).toBeCloseTo(5_000, -1);
+    expect(haversineMeters(centre, { lat: centre.lat, lng: box.west })).toBeCloseTo(5_000, -1);
+  });
+
+  it('widens the longitude span nearer the poles, where degrees are shorter', () => {
+    const equator = boundsAround({ lat: 0, lng: 0 }, 5_000);
+    const arctic = boundsAround({ lat: 70, lng: 0 }, 5_000);
+
+    expect(arctic.east - arctic.west).toBeGreaterThan(equator.east - equator.west);
   });
 });

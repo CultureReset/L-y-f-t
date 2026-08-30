@@ -7,17 +7,25 @@
 import { z } from 'zod';
 import type { DriverId, VehicleId } from '../util/ids.js';
 
-export type VehicleColor =
-  | 'black'
-  | 'white'
-  | 'silver'
-  | 'gray'
-  | 'red'
-  | 'blue'
-  | 'green'
-  | 'brown'
-  | 'gold'
-  | 'other';
+/**
+ * A closed vocabulary, because the rider is told a colour to look for and
+ * "pearl graphite" is not a thing anyone can spot from a kerb. Exported as an
+ * array so a form can offer exactly these and nothing else.
+ */
+export const VEHICLE_COLORS = [
+  'black',
+  'white',
+  'silver',
+  'gray',
+  'red',
+  'blue',
+  'green',
+  'brown',
+  'gold',
+  'other',
+] as const;
+
+export type VehicleColor = (typeof VEHICLE_COLORS)[number];
 
 export interface Vehicle {
   readonly id: VehicleId;

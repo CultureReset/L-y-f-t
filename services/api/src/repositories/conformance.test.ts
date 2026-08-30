@@ -82,7 +82,8 @@ const suites: { name: string; create: () => Promise<Repositories> | Repositories
       const pg = await import('pg');
       const pool = new pg.default.Pool({ connectionString: process.env.TEST_DATABASE_URL! });
       await pool.query(
-        `TRUNCATE support_tickets, promo_redemptions, chat_messages, charges,
+        `TRUNCATE payouts, payout_destinations, support_tickets, promo_redemptions,
+                  chat_messages, charges,
                   payment_methods, offers, rides, shifts, vehicles, drivers,
                   riders, verifications, sessions, users RESTART IDENTITY CASCADE`,
       );

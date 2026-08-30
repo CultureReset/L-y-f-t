@@ -197,7 +197,20 @@ export default function Account(): React.JSX.Element {
 
         <Column gap="sm">
           <Button label="Earnings" variant="secondary" onPress={() => router.push('/earnings')} />
-          <Button label="Vehicle & documents" variant="secondary" onPress={() => router.push('/onboarding')} />
+          <Button label="Payouts" variant="secondary" onPress={() => router.push('/payouts')} />
+          <Button label="Your rating" variant="secondary" onPress={() => router.push('/ratings')} />
+          <Button
+            label="Ride preferences"
+            variant="secondary"
+            onPress={() => router.push('/preferences')}
+          />
+          <Button label="Your vehicles" variant="secondary" onPress={() => router.push('/vehicles')} />
+          <Button
+            label="Documents"
+            variant="secondary"
+            onPress={() => router.push('/onboarding')}
+          />
+          <Button label="Help" variant="secondary" onPress={() => router.push('/support')} />
           <Button
             label="Sign out"
             variant="ghost"

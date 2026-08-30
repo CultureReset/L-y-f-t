@@ -13,6 +13,7 @@ import {
   RideTypeCatalog,
   TypedEmitter,
   defaultHelpCenter,
+  defaultPayoutPolicy,
   defaultPromos,
   defaultRideTypes,
   defaultTicketCatalog,
@@ -27,6 +28,7 @@ import {
   type HelpCenter,
   type MatchingStrategy,
   type PaymentGateway,
+  type PayoutPolicy,
   type Promo,
   type PlatformConfig,
   type PlatformEvents,
@@ -60,6 +62,7 @@ import { RideService } from './services/rideService.js';
 import { DriverService } from './services/driverService.js';
 import { RiderService } from './services/riderService.js';
 import { ChatService } from './services/chatService.js';
+import { PayoutService } from './services/payoutService.js';
 import { PromoService } from './services/promoService.js';
 import { SupportService } from './services/supportService.js';
 import {
@@ -86,6 +89,8 @@ export interface ContainerOverrides {
   readonly helpCenter?: HelpCenter;
   /** Replace the shipped promo codes with an operator's own. */
   readonly promos?: readonly Promo[];
+  /** Payout minimums, fees, and schedule — a market-level decision. */
+  readonly payoutPolicy?: PayoutPolicy;
   readonly ticketCatalog?: TicketCatalog;
   readonly logger?: Logger;
 }
@@ -130,6 +135,7 @@ export interface Container {
   readonly drivers: DriverService;
   readonly riders: RiderService;
   readonly chat: ChatService;
+  readonly payouts: PayoutService;
   readonly promos: PromoService;
   readonly support: SupportService;
   readonly notifications: NotificationService;
@@ -333,6 +339,14 @@ export const createContainer = async (
     events,
   });
 
+  const payouts = new PayoutService({
+    payouts: repositories.payouts,
+    rides: repositories.rides,
+    policy: overrides.payoutPolicy ?? defaultPayoutPolicy(config.market.currency),
+    currency: config.market.currency,
+    clock,
+  });
+
   const promos = new PromoService({
     promos: repositories.promos,
     rides: repositories.rides,
@@ -376,6 +390,7 @@ export const createContainer = async (
     drivers,
     riders,
     chat,
+    payouts,
     promos,
     support,
     notifications,

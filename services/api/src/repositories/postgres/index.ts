@@ -29,6 +29,7 @@ import {
   type OfferId,
   type PaymentMethod,
   type PaymentMethodId,
+  type Payout,
   type Place,
   type PlaceId,
   type Position,
@@ -53,6 +54,8 @@ import type {
   DriverRepository,
   OfferRepository,
   PaymentMethodRepository,
+  PayoutDestination,
+  PayoutRepository,
   PromoRepository,
   Repositories,
   RideQuery,
@@ -836,6 +839,103 @@ class PgChatRepository implements ChatRepository {
   }
 }
 
+class PgPayoutRepository implements PayoutRepository {
+  constructor(private readonly pool: Pool) {}
+
+  async create(payout: Payout): Promise<Payout> {
+    await this.pool.query(
+      'INSERT INTO payouts (id, driver_id, kind, status, requested_at, doc) VALUES ($1,$2,$3,$4,$5,$6)',
+      [payout.id, payout.driverId, payout.kind, payout.status, payout.requestedAt, JSON.stringify(payout)],
+    );
+    return payout;
+  }
+
+  async findById(id: string): Promise<Payout | undefined> {
+    const { rows } = await this.pool.query('SELECT doc FROM payouts WHERE id = $1', [id]);
+    return rows[0] ? (rows[0].doc as Payout) : undefined;
+  }
+
+  async update(id: string, patch: Partial<Payout>): Promise<Payout> {
+    const current = await this.findById(id);
+    if (!current) throw notFound(`Payout ${id}`);
+    const next = { ...current, ...patch };
+    await this.pool.query('UPDATE payouts SET status = $2, doc = $3 WHERE id = $1', [
+      id,
+      next.status,
+      JSON.stringify(next),
+    ]);
+    return next;
+  }
+
+  async listForDriver(driverId: DriverId, limit = 50): Promise<Payout[]> {
+    const { rows } = await this.pool.query(
+      'SELECT doc FROM payouts WHERE driver_id = $1 ORDER BY requested_at DESC LIMIT $2',
+      [driverId, limit],
+    );
+    return rows.map((r) => r.doc as Payout);
+  }
+
+  async countInstantSince(driverId: DriverId, since: number): Promise<number> {
+    const { rows } = await this.pool.query(
+      `SELECT COUNT(*)::int AS count FROM payouts
+        WHERE driver_id = $1 AND kind = 'instant' AND requested_at >= $2`,
+      [driverId, since],
+    );
+    return (rows[0]?.count as number) ?? 0;
+  }
+
+  async totalCommitted(driverId: DriverId): Promise<number> {
+    // A failed payout releases its money back to the balance.
+    const { rows } = await this.pool.query(
+      `SELECT COALESCE(SUM((doc->'amount'->>'amount')::BIGINT + (doc->'fee'->>'amount')::BIGINT), 0)::BIGINT AS total
+         FROM payouts WHERE driver_id = $1 AND status <> 'failed'`,
+      [driverId],
+    );
+    return Number(rows[0]?.total ?? 0);
+  }
+
+  async addDestination(destination: PayoutDestination): Promise<PayoutDestination> {
+    if (destination.isDefault) {
+      await this.pool.query(
+        'UPDATE payout_destinations SET is_default = FALSE WHERE driver_id = $1',
+        [destination.driverId],
+      );
+    }
+    await this.pool.query(
+      `INSERT INTO payout_destinations (id, driver_id, label, gateway_token, is_default, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [
+        destination.id,
+        destination.driverId,
+        destination.label,
+        destination.gatewayToken ?? null,
+        destination.isDefault,
+        destination.createdAt,
+      ],
+    );
+    return destination;
+  }
+
+  async listDestinations(driverId: DriverId): Promise<PayoutDestination[]> {
+    const { rows } = await this.pool.query(
+      'SELECT * FROM payout_destinations WHERE driver_id = $1 ORDER BY created_at',
+      [driverId],
+    );
+    return rows.map((r) => ({
+      id: r.id as string,
+      driverId: r.driver_id as DriverId,
+      label: r.label as string,
+      isDefault: r.is_default as boolean,
+      createdAt: Number(r.created_at),
+      ...(r.gateway_token ? { gatewayToken: r.gateway_token as string } : {}),
+    }));
+  }
+
+  async removeDestination(id: string): Promise<void> {
+    await this.pool.query('DELETE FROM payout_destinations WHERE id = $1', [id]);
+  }
+}
+
 class PgPromoRepository implements PromoRepository {
   constructor(private readonly pool: Pool) {}
 
@@ -1033,6 +1133,7 @@ export const createPostgresRepositories = async (
     paymentMethods: new PgPaymentMethodRepository(pool),
     charges: new PgChargeRepository(pool),
     chat: new PgChatRepository(pool),
+    payouts: new PgPayoutRepository(pool),
     promos: new PgPromoRepository(pool),
     support: new PgSupportRepository(pool),
     close: () => pool.end(),

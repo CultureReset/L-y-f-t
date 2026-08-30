@@ -28,6 +28,7 @@ import {
   type OfferId,
   type PaymentMethod,
   type PaymentMethodId,
+  type Payout,
   type Place,
   type PlaceId,
   type Position,
@@ -53,6 +54,8 @@ import type {
   DriverRepository,
   OfferRepository,
   PaymentMethodRepository,
+  PayoutDestination,
+  PayoutRepository,
   PromoRepository,
   Repositories,
   RideQuery,
@@ -622,6 +625,68 @@ class MemoryChatRepository implements ChatRepository {
  * codes, pending offers — must agree with whatever clock the rest of the
  * platform is running on, including a hand-driven one in tests.
  */
+class MemoryPayoutRepository implements PayoutRepository {
+  private readonly byId = new Map<string, Payout>();
+  private readonly destinations = new Map<string, PayoutDestination>();
+
+  async create(payout: Payout): Promise<Payout> {
+    this.byId.set(payout.id, payout);
+    return payout;
+  }
+
+  async findById(id: string): Promise<Payout | undefined> {
+    return this.byId.get(id);
+  }
+
+  async update(id: string, patch: Partial<Payout>): Promise<Payout> {
+    const current = this.byId.get(id);
+    if (!current) throw notFound(`Payout ${id}`);
+    const next = { ...current, ...patch };
+    this.byId.set(id, next);
+    return next;
+  }
+
+  async listForDriver(driverId: DriverId, limit = 50): Promise<Payout[]> {
+    return [...this.byId.values()]
+      .filter((p) => p.driverId === driverId)
+      .sort((a, b) => b.requestedAt - a.requestedAt)
+      .slice(0, limit);
+  }
+
+  async countInstantSince(driverId: DriverId, since: number): Promise<number> {
+    return [...this.byId.values()].filter(
+      (p) => p.driverId === driverId && p.kind === 'instant' && p.requestedAt >= since,
+    ).length;
+  }
+
+  async totalCommitted(driverId: DriverId): Promise<number> {
+    // A failed payout releases its money back to the balance.
+    return [...this.byId.values()]
+      .filter((p) => p.driverId === driverId && p.status !== 'failed')
+      .reduce((total, p) => total + p.amount.amount + p.fee.amount, 0);
+  }
+
+  async addDestination(destination: PayoutDestination): Promise<PayoutDestination> {
+    if (destination.isDefault) {
+      for (const [id, existing] of this.destinations) {
+        if (existing.driverId === destination.driverId && existing.isDefault) {
+          this.destinations.set(id, { ...existing, isDefault: false });
+        }
+      }
+    }
+    this.destinations.set(destination.id, destination);
+    return destination;
+  }
+
+  async listDestinations(driverId: DriverId): Promise<PayoutDestination[]> {
+    return [...this.destinations.values()].filter((d) => d.driverId === driverId);
+  }
+
+  async removeDestination(id: string): Promise<void> {
+    this.destinations.delete(id);
+  }
+}
+
 class MemoryPromoRepository implements PromoRepository {
   private readonly redemptions: PromoRedemption[] = [];
 
@@ -704,6 +769,7 @@ export const createMemoryRepositories = (clock: Clock = systemClock): Repositori
     paymentMethods: new MemoryPaymentMethodRepository(),
     charges,
     chat: new MemoryChatRepository(),
+    payouts: new MemoryPayoutRepository(),
     promos: new MemoryPromoRepository(),
     support: new MemorySupportRepository(),
     close: async () => {},

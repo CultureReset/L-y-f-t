@@ -19,6 +19,7 @@ import type {
   OfferId,
   PaymentMethod,
   PaymentMethodId,
+  Payout,
   Place,
   PlaceId,
   Position,
@@ -210,6 +211,33 @@ export interface ChatRepository {
   markRead(rideId: RideId, reader: 'rider' | 'driver', at: number): Promise<void>;
 }
 
+// --------------------------------------------------------------- payouts
+
+/** Where a driver's money goes. Tokenised by the gateway, never a raw account. */
+export interface PayoutDestination {
+  readonly id: string;
+  readonly driverId: DriverId;
+  readonly label: string;
+  readonly gatewayToken?: string;
+  readonly isDefault: boolean;
+  readonly createdAt: number;
+}
+
+export interface PayoutRepository {
+  create(payout: Payout): Promise<Payout>;
+  findById(id: string): Promise<Payout | undefined>;
+  update(id: string, patch: Partial<Payout>): Promise<Payout>;
+  listForDriver(driverId: DriverId, limit?: number): Promise<Payout[]>;
+  /** Instant cash outs a driver has taken since a moment — the daily limit. */
+  countInstantSince(driverId: DriverId, since: number): Promise<number>;
+  /** Everything already paid out or in flight, so a balance is not double-spent. */
+  totalCommitted(driverId: DriverId): Promise<number>;
+
+  addDestination(destination: PayoutDestination): Promise<PayoutDestination>;
+  listDestinations(driverId: DriverId): Promise<PayoutDestination[]>;
+  removeDestination(id: string): Promise<void>;
+}
+
 // --------------------------------------------------------------- promos
 
 /**
@@ -262,6 +290,7 @@ export interface Repositories {
   readonly paymentMethods: PaymentMethodRepository;
   readonly charges: ChargeRepository;
   readonly chat: ChatRepository;
+  readonly payouts: PayoutRepository;
   readonly promos: PromoRepository;
   readonly support: SupportRepository;
   /** Release connections; a no-op for the in-memory store. */

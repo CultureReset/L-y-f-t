@@ -42,10 +42,24 @@ export interface MapCircle {
   readonly opacity?: number;
 }
 
+/**
+ * A filled area — a demand heat map cell, an airport zone, a service boundary.
+ * Drawn under the polylines so a route stays readable over it.
+ */
+export interface MapPolygon {
+  readonly id: string;
+  readonly points: readonly LatLng[];
+  readonly fill?: string;
+  readonly fillOpacity?: number;
+  readonly stroke?: string;
+  readonly strokeWidth?: number;
+}
+
 export interface MapProps {
   readonly markers?: readonly MapMarker[];
   readonly polylines?: readonly MapPolyline[];
   readonly circles?: readonly MapCircle[];
+  readonly polygons?: readonly MapPolygon[];
   /** Frame the map so all of these are visible. */
   readonly fitTo?: readonly LatLng[];
   readonly center?: LatLng;

@@ -43,6 +43,9 @@ export * from './matching/scoring.js';
 export * from './matching/strategies.js';
 export * from './matching/dispatcher.js';
 
+// Driver earnings, payouts, and ratings
+export * from './driver/index.js';
+
 // Promotions
 export * from './promos/index.js';
 

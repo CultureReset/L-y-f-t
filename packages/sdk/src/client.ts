@@ -28,7 +28,12 @@ import type {
   ReceiptResponse,
   RideResponse,
   RideTypeSummary,
+  NavigationResponse,
+  PayoutDestinationView,
+  PayoutsResponse,
+  RatingsResponse,
   SavedPlacesResponse,
+  SurgeCell,
 } from './types.js';
 import type {
   DriverPreferences,
@@ -40,6 +45,8 @@ import type {
   PromoApplication,
   PromoRedemption,
   PromoWallet,
+  CashOutQuote,
+  Payout,
   SavedPlace,
   SupportTicket,
   VehicleInput,
@@ -361,6 +368,55 @@ export class LiftClient {
 
   quickReplies(): Promise<{ replies: string[] }> {
     return this.get('/v1/rides/quick-replies');
+  }
+
+  /** Turn-by-turn for the leg the driver is on now. */
+  navigation(
+    rideId: string,
+    from?: { lat: number; lng: number },
+  ): Promise<NavigationResponse> {
+    return this.get(`/v1/driver/rides/${rideId}/navigation`, from ?? {});
+  }
+
+  // ------------------------------------------------- driver ratings & pay
+
+  driverRatings(): Promise<RatingsResponse> {
+    return this.get('/v1/driver/ratings');
+  }
+
+  driverPayouts(): Promise<PayoutsResponse> {
+    return this.get('/v1/driver/payouts');
+  }
+
+  /** Price a cash out without taking it. */
+  quoteCashOut(amount: number): Promise<{ quote: CashOutQuote }> {
+    return this.post('/v1/driver/payouts/quote', { amount });
+  }
+
+  cashOut(amount: number): Promise<{ payout: Payout }> {
+    return this.post('/v1/driver/payouts/cashout', { amount });
+  }
+
+  addPayoutDestination(input: {
+    label: string;
+    gatewayToken?: string;
+    makeDefault?: boolean;
+  }): Promise<{ destination: PayoutDestinationView }> {
+    return this.post('/v1/driver/payouts/destinations', input);
+  }
+
+  removePayoutDestination(id: string): Promise<{ ok: boolean }> {
+    return this.del(`/v1/driver/payouts/destinations/${id}`);
+  }
+
+  /** The demand heat map, for deciding where to wait between trips. */
+  driverDemand(bounds: {
+    south: number;
+    west: number;
+    north: number;
+    east: number;
+  }): Promise<{ cells: SurgeCell[]; provider: string }> {
+    return this.get('/v1/driver/demand', bounds);
   }
 
   // --------------------------------------------------------------- promos

@@ -134,7 +134,13 @@ export default function Earnings(): React.JSX.Element {
         <Column gap="sm">
           <Text variant="heading">Trips</Text>
           {(data?.rides ?? []).map((trip) => (
-            <Card key={trip.rideId} padded="md">
+            <Pressable
+              key={trip.rideId}
+              onPress={() => router.push(`/trip/${trip.rideId}` as never)}
+              accessibilityRole="button"
+              accessibilityLabel={`Trip to ${trip.dropoff}`}
+            >
+              <Card padded="md">
               <Row justify="space-between">
                 <Column gap="xxs" style={{ flex: 1 }}>
                   <Text variant="caption" numberOfLines={1}>
@@ -155,7 +161,8 @@ export default function Earnings(): React.JSX.Element {
                 </Column>
                 <Text variant="bodyStrong">{trip.payout ? formatMoney(trip.payout) : '—'}</Text>
               </Row>
-            </Card>
+              </Card>
+            </Pressable>
           ))}
           {(data?.rides ?? []).length === 0 ? (
             <Text variant="caption" color="muted">

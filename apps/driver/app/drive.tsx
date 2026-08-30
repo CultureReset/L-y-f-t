@@ -273,7 +273,22 @@ const IdlePanel = ({
         />
       ) : null}
 
-      <Button label="Account" variant="ghost" onPress={() => router.push('/account')} />
+      {/* What a driver does while waiting: look at demand, tune what they take. */}
+      <Row gap="sm">
+        <Button
+          label="Demand"
+          variant="secondary"
+          size="sm"
+          onPress={() => router.push('/demand')}
+        />
+        <Button
+          label="Preferences"
+          variant="secondary"
+          size="sm"
+          onPress={() => router.push('/preferences')}
+        />
+        <Button label="Account" variant="ghost" size="sm" onPress={() => router.push('/account')} />
+      </Row>
     </Column>
   );
 };
@@ -446,7 +461,14 @@ const TripPanel = ({
         </Row>
       ) : null}
 
-      {/* Turn-by-turn for the leg being driven. */}
+      {/* Turn-by-turn for the leg being driven, one tap from anywhere. */}
+      <Button
+        label="Navigate"
+        variant="primary"
+        size="lg"
+        onPress={() => router.push(`/navigate/${ride.id}` as never)}
+      />
+
       {ride.riderNote ? (
         <Card padded="md">
           <Text variant="caption" color="secondary">
@@ -505,7 +527,16 @@ const TripPanel = ({
           label="Complete trip"
           variant="success"
           size="lg"
-          onPress={() => void act(() => client.completeTrip(ride.id), 'Could not complete the trip')}
+          onPress={() =>
+            void act(async () => {
+              await client.completeTrip(ride.id);
+              // Rate while the trip is fresh; the screen allows a skip.
+              router.push({
+                pathname: '/rate/[id]',
+                params: { id: ride.id, ...(rider ? { name: rider.name } : {}) },
+              });
+            }, 'Could not complete the trip')
+          }
           loading={busy}
         />
       ) : null}

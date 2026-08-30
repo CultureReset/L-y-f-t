@@ -21,6 +21,7 @@ export type ChargeId = Brand<string, 'ChargeId'>;
 export type SessionId = Brand<string, 'SessionId'>;
 export type MessageId = Brand<string, 'MessageId'>;
 export type TicketId = Brand<string, 'TicketId'>;
+export type PayoutId = Brand<string, 'PayoutId'>;
 
 export const ID_PREFIXES = {
   user: 'usr',
@@ -35,6 +36,8 @@ export const ID_PREFIXES = {
   session: 'ses',
   message: 'msg',
   ticket: 'tkt',
+  payout: 'po',
+  payoutDestination: 'pod',
   promo: 'promo',
 } as const;
 
@@ -85,6 +88,7 @@ export const newChargeId = () => newId<ChargeId>('charge');
 export const newSessionId = () => newId<SessionId>('session');
 export const newMessageId = () => newId<MessageId>('message');
 export const newTicketId = () => newId<TicketId>('ticket');
+export const newPayoutId = () => newId<PayoutId>('payout');
 
 export const isId = (kind: IdKind, value: unknown): boolean =>
   typeof value === 'string' && value.startsWith(`${ID_PREFIXES[kind]}_`);

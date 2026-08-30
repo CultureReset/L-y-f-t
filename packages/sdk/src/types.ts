@@ -20,7 +20,11 @@ import type {
   Place,
   Position,
   HelpTopic,
+  PayoutBalance,
+  PayoutPolicy,
+  Payout,
   PromoApplication,
+  RatingBreakdown,
   Ride,
   RideOffer,
   RiderProfile,
@@ -343,4 +347,64 @@ export interface AdminDriverView {
 export interface HelpResponse {
   readonly topics: readonly HelpTopic[];
   readonly categories: readonly TicketCategory[];
+}
+
+export interface RatingsResponse {
+  readonly breakdown: RatingBreakdown;
+  /** Ride ids whose low rating came with nothing to act on. */
+  readonly disputable: readonly string[];
+  readonly comments: readonly {
+    readonly rideId: string;
+    readonly stars: number;
+    readonly comment?: string;
+    readonly tags: readonly string[];
+    readonly at: number;
+  }[];
+}
+
+/** A payout destination as a client may see it — never the gateway token. */
+export interface PayoutDestinationView {
+  readonly id: string;
+  readonly driverId: string;
+  readonly label: string;
+  readonly isDefault: boolean;
+  readonly createdAt: number;
+}
+
+export interface PayoutsResponse {
+  readonly balance: PayoutBalance;
+  readonly payouts: readonly Payout[];
+  readonly destinations: readonly PayoutDestinationView[];
+  readonly policy: PayoutPolicy;
+}
+
+/** One square of the demand heat map. */
+export interface SurgeCell {
+  readonly bounds: BoundingBox;
+  readonly multiplier: number;
+  readonly demand?: number;
+  readonly supply?: number;
+}
+
+export interface NavigationResponse {
+  readonly leg: {
+    readonly kind: 'to_pickup' | 'to_stop' | 'to_dropoff';
+    readonly to: LatLng;
+    readonly destinationName: string;
+    readonly destinationAddress: string;
+  } | null;
+  readonly steps: readonly RouteStepView[];
+  readonly distanceMeters?: number;
+  readonly durationMs?: number;
+  readonly geometry?: string;
+}
+
+export interface RouteStepView {
+  readonly instruction: string;
+  readonly maneuver: string;
+  readonly distanceMeters: number;
+  readonly durationMs: number;
+  readonly location: LatLng;
+  readonly streetName?: string;
+  readonly geometry: string;
 }

@@ -203,3 +203,29 @@ CREATE TABLE IF NOT EXISTS promo_redemptions (
 CREATE INDEX IF NOT EXISTS promo_rider_idx ON promo_redemptions(code, rider_id);
 CREATE INDEX IF NOT EXISTS promo_code_idx ON promo_redemptions(code);
 CREATE INDEX IF NOT EXISTS promo_rider_all_idx ON promo_redemptions(rider_id, redeemed_at DESC);
+
+CREATE TABLE IF NOT EXISTS payouts (
+  id            TEXT PRIMARY KEY,
+  driver_id     TEXT NOT NULL,
+  kind          TEXT NOT NULL,
+  status        TEXT NOT NULL,
+  requested_at  BIGINT NOT NULL,
+  doc           JSONB NOT NULL
+);
+CREATE INDEX IF NOT EXISTS payouts_driver_idx ON payouts(driver_id, requested_at DESC);
+-- The daily instant-cash-out limit is a count over this index.
+CREATE INDEX IF NOT EXISTS payouts_instant_idx ON payouts(driver_id, requested_at)
+  WHERE kind = 'instant';
+
+CREATE TABLE IF NOT EXISTS payout_destinations (
+  id            TEXT PRIMARY KEY,
+  driver_id     TEXT NOT NULL,
+  label         TEXT NOT NULL,
+  gateway_token TEXT,
+  is_default    BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at    BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS payout_destinations_driver_idx ON payout_destinations(driver_id);
+-- A driver has at most one default destination.
+CREATE UNIQUE INDEX IF NOT EXISTS payout_destinations_one_default_idx
+  ON payout_destinations(driver_id) WHERE is_default;
