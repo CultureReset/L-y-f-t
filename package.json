@@ -2,7 +2,7 @@
   "name": "lift-platform",
   "private": true,
   "version": "1.0.0",
-  "description": "L-Y-F-T — a modular, end-to-end ridehail platform: rider app, driver app, dispatch backend, ops console, and fleet simulator.",
+  "description": "L-Y-F-T \u2014 a modular, end-to-end ridehail platform: rider app, driver app, dispatch backend, ops console, and fleet simulator.",
   "workspaces": [
     "packages/*",
     "services/*",
@@ -30,10 +30,15 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
-    "@types/react": "^19.2.18",
+    "@types/react": "~19.1.0",
     "concurrently": "^9.1.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
+  },
+  "overrides": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "0.81.4"
   }
 }

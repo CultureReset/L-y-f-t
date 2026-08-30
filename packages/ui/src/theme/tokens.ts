@@ -193,18 +193,38 @@ export const radius = {
   pill: 999,
 } as const;
 
+/**
+ * The type ramp.
+ *
+ * Typed explicitly rather than with `as const`: a const assertion freezes
+ * `fontVariant` into a readonly tuple, which React Native's TextStyle rejects.
+ */
+export type FontVariantOption =
+  | 'tabular-nums'
+  | 'lining-nums'
+  | 'oldstyle-nums'
+  | 'proportional-nums';
+
+export interface TypeStyle {
+  fontSize: number;
+  lineHeight: number;
+  fontWeight: '300' | '400' | '500' | '600' | '700' | '800';
+  letterSpacing?: number;
+  fontVariant?: FontVariantOption[];
+}
+
 export const typography = {
-  display: { fontSize: 34, lineHeight: 40, fontWeight: '700' as const, letterSpacing: -0.5 },
-  title: { fontSize: 24, lineHeight: 30, fontWeight: '700' as const, letterSpacing: -0.3 },
-  heading: { fontSize: 19, lineHeight: 25, fontWeight: '600' as const, letterSpacing: -0.2 },
-  body: { fontSize: 16, lineHeight: 23, fontWeight: '400' as const },
-  bodyStrong: { fontSize: 16, lineHeight: 23, fontWeight: '600' as const },
-  caption: { fontSize: 14, lineHeight: 19, fontWeight: '400' as const },
-  captionStrong: { fontSize: 14, lineHeight: 19, fontWeight: '600' as const },
-  label: { fontSize: 12, lineHeight: 16, fontWeight: '600' as const, letterSpacing: 0.4 },
+  display: { fontSize: 34, lineHeight: 40, fontWeight: '700', letterSpacing: -0.5 },
+  title: { fontSize: 24, lineHeight: 30, fontWeight: '700', letterSpacing: -0.3 },
+  heading: { fontSize: 19, lineHeight: 25, fontWeight: '600', letterSpacing: -0.2 },
+  body: { fontSize: 16, lineHeight: 23, fontWeight: '400' },
+  bodyStrong: { fontSize: 16, lineHeight: 23, fontWeight: '600' },
+  caption: { fontSize: 14, lineHeight: 19, fontWeight: '400' },
+  captionStrong: { fontSize: 14, lineHeight: 19, fontWeight: '600' },
+  label: { fontSize: 12, lineHeight: 16, fontWeight: '600', letterSpacing: 0.4 },
   /** Tabular figures for money and countdowns, so digits do not jitter. */
-  mono: { fontSize: 16, lineHeight: 22, fontWeight: '600' as const, fontVariant: ['tabular-nums' as const] },
-} as const;
+  mono: { fontSize: 16, lineHeight: 22, fontWeight: '600', fontVariant: ['tabular-nums'] },
+} satisfies Record<string, TypeStyle>;
 
 export type TypographyKey = keyof typeof typography;
 

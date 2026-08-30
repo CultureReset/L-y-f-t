@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "Lyft Clone",
+    "slug": "lift-rider",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "liftrider",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#8B2FD6",
+      "resizeMode": "contain"
+    },
+    "android": {
+      "package": "com.lift.rider",
+      "adaptiveIcon": { "backgroundColor": "#8B2FD6" },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "FOREGROUND_SERVICE"
+      ],
+      "edgeToEdgeEnabled": true
+    },
+    "ios": {
+      "bundleIdentifier": "com.lift.rider",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "We use your location to set your pickup point and show your driver on the way."
+      }
+    },
+    "web": { "bundler": "metro", "output": "single" },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "We use your location to set your pickup point and show your driver on the way."
+        }
+      ]
+    ],
+    "experiments": { "typedRoutes": false }
+  }
+}

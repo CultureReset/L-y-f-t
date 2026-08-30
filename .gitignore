@@ -13,3 +13,7 @@ coverage/
 web-build/
 android/
 ios/
+
+# Expo build output
+apps/*/dist/
+apps/*/.expo/
