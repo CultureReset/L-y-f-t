@@ -12,6 +12,12 @@
  *    `.js` extension even though the file on disk is `.ts`/`.tsx`. Metro takes
  *    the specifier literally and cannot find the file, so the resolver below
  *    retries those requests against the real source extensions.
+ *
+ *    That retry has to honour platform extensions itself. Metro normally tries
+ *    `thing.web.ts` before `thing.ts`; a resolver that answers with `thing.ts`
+ *    the moment it exists silently disables every platform-specific file in
+ *    the codebase, which is how a module that only works on a device ends up
+ *    in the web bundle.
  */
 
 const path = require('node:path');
@@ -25,16 +31,26 @@ const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx'];
  * Returns undefined when the request is not a relative `.js` import, or when
  * no source file matches — in which case Metro's own resolver handles it.
  */
-const resolveSourceExtension = (context, moduleName) => {
+const resolveSourceExtension = (context, moduleName, platform) => {
   if (!moduleName.endsWith('.js')) return undefined;
   if (!moduleName.startsWith('./') && !moduleName.startsWith('../')) return undefined;
 
   const originDir = path.dirname(context.originModulePath);
   const withoutExtension = path.resolve(originDir, moduleName.slice(0, -'.js'.length));
 
-  for (const extension of SOURCE_EXTENSIONS) {
-    const candidate = `${withoutExtension}${extension}`;
-    if (fs.existsSync(candidate)) return { type: 'sourceFile', filePath: candidate };
+  // Platform-specific first, exactly as Metro would: `push.web.ts` beats
+  // `push.native.ts` beats `push.ts`.
+  const qualifiers = [
+    ...(platform ? [`.${platform}`] : []),
+    ...(platform && platform !== 'web' ? ['.native'] : []),
+    '',
+  ];
+
+  for (const qualifier of qualifiers) {
+    for (const extension of SOURCE_EXTENSIONS) {
+      const candidate = `${withoutExtension}${qualifier}${extension}`;
+      if (fs.existsSync(candidate)) return { type: 'sourceFile', filePath: candidate };
+    }
   }
   return undefined;
 };
@@ -58,7 +74,7 @@ const createWorkspaceMetroConfig = (projectRoot) => {
 
   const defaultResolveRequest = config.resolver.resolveRequest;
   config.resolver.resolveRequest = (context, moduleName, platform) => {
-    const rewritten = resolveSourceExtension(context, moduleName);
+    const rewritten = resolveSourceExtension(context, moduleName, platform);
     if (rewritten) return rewritten;
     return defaultResolveRequest
       ? defaultResolveRequest(context, moduleName, platform)

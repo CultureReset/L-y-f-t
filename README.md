@@ -115,6 +115,50 @@ spend, and driver earnings.
 
 ---
 
+## Every screen
+
+Both apps are complete, not a demo path. Every screen below is reachable, does
+something real against the API, and has been driven in a browser against a
+running backend.
+
+### Rider
+
+| Screen | What it does |
+| --- | --- |
+| Sign in | Phone, one-time code, and a name for a new account |
+| Home | The map, saved places, and where-to |
+| Search | Places from every registered source, with a stop or pickup edit |
+| Confirm | Route, a price per class of service, stops, scheduling, a promo code, a note for the driver, and what each ride type includes |
+| Live ride | Driver approaching, the vehicle to look for, chat, and cancel with a reason |
+| Safety | Share the trip, call emergency services, and the ride details a dispatcher would ask for |
+| Activity | Rides booked for later, and history |
+| Receipt | The fare as the line items that sum to it |
+| Wallet | Cards and charges |
+| Add a card | Validated on the device; only the brand and last four leave it |
+| Saved places | Home, work, and favourites |
+| Settings | Profile, accessibility that changes matching, and notifications |
+| Help | Topics, articles, and a request that becomes a conversation |
+
+### Driver
+
+| Screen | What it does |
+| --- | --- |
+| Sign in | As above, for a driver |
+| Drive | Online toggle, today's earnings, the offer with its countdown, and the live trip |
+| Navigate | Turn-by-turn that re-routes when you stray, or hand off to another maps app |
+| Earnings | Per-hour beside the total, and every trip |
+| Trip | One trip's fare, and how it was split |
+| Payouts | Balance, cash out with the fee quoted first, and where it goes |
+| Your rating | The distribution, the tags, and the low ratings with nothing to act on |
+| Ride preferences | Ride types, pickup radius, destination filter, auto-accept |
+| Vehicles | Add one, and say which you are driving tonight |
+| Demand | Where the multiplier is above one |
+| Rate the rider | Asks why below four stars |
+| Onboarding | Documents and approval |
+| Help | The same help centre, narrowed to a driver |
+
+---
+
 ## Everything is swappable
 
 The platform is built out of ports. Each one has a working default, and each one
