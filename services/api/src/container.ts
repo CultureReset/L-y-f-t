@@ -12,6 +12,7 @@
 import {
   RideTypeCatalog,
   TypedEmitter,
+  defaultRideTypes,
   combineSurge,
   demandSurgeProvider,
   flatSurgeProvider,
@@ -152,7 +153,11 @@ export const createContainer = async (
         logger.warn({ method, err: error }, 'geo provider fell back to the mock'),
     });
 
-  const catalog = new RideTypeCatalog(overrides.rideTypes);
+  // The stock catalog is priced in the market's currency; a mismatch would make
+  // the pricing engine reject the first quote.
+  const catalog = new RideTypeCatalog(
+    overrides.rideTypes ?? defaultRideTypes(config.market.currency),
+  );
   const surge = overrides.surge ?? buildSurgeProvider(config, repositories);
 
   const places = new PlaceSourceRegistry(
@@ -198,6 +203,7 @@ export const createContainer = async (
     clock,
     events,
     sender: overrides.codeSender ?? consoleCodeSender((m) => logger.info({}, m)),
+    market: config.market,
     options: serverConfig.devAuthCode
       ? { fixedCode: serverConfig.devAuthCode, allowFixedCode: true }
       : {},

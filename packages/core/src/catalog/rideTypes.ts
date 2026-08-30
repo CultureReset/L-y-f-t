@@ -58,7 +58,8 @@ export interface RideTypeDispatchConfig {
   readonly offerBatchSize: number;
 }
 
-const usd = (v: number): Money => fromDecimal(v, 'USD');
+/** Build an amount in whichever currency the market runs on. */
+const at = (currency: CurrencyCode) => (value: number): Money => fromDecimal(value, currency);
 
 /** A sensible rate card to build tiers from; override the fields that differ. */
 export const baseRateCard = (currency: CurrencyCode = 'USD'): RateCard => ({
@@ -85,10 +86,15 @@ const defaultDispatch: RideTypeDispatchConfig = {
 };
 
 /**
- * The stock catalog. This is data, not structure — replace it wholesale for a
- * different market and nothing downstream changes.
+ * The stock catalog, priced in the market's currency.
+ *
+ * This is data, not structure — replace it wholesale for a different market and
+ * nothing downstream changes. The rates below are illustrative; the shape is
+ * the point.
  */
-export const DEFAULT_RIDE_TYPES: readonly RideType[] = [
+export const defaultRideTypes = (currency: CurrencyCode = 'USD'): RideType[] => {
+  const money = at(currency);
+  return [
   {
     id: 'standard',
     name: 'Standard',
@@ -97,7 +103,7 @@ export const DEFAULT_RIDE_TYPES: readonly RideType[] = [
     icon: 'car',
     displayOrder: 10,
     maxPassengers: 4,
-    rateCard: baseRateCard(),
+    rateCard: baseRateCard(currency),
     vehicleRequirements: { minSeats: 4, requiredFeatures: [] },
     dispatch: defaultDispatch,
     badge: 'Popular',
@@ -114,12 +120,12 @@ export const DEFAULT_RIDE_TYPES: readonly RideType[] = [
     displayOrder: 5,
     maxPassengers: 2,
     rateCard: {
-      ...baseRateCard(),
-      baseFare: usd(1.75),
-      perMile: usd(0.85),
-      perMinute: usd(0.19),
-      minimumFare: usd(4.5),
-      serviceFee: usd(2.4),
+      ...baseRateCard(currency),
+      baseFare: money(1.75),
+      perMile: money(0.85),
+      perMinute: money(0.19),
+      minimumFare: money(4.5),
+      serviceFee: money(2.4),
     },
     vehicleRequirements: { minSeats: 4, requiredFeatures: [] },
     dispatch: { ...defaultDispatch, searchRadiusMeters: 6_000, searchTimeoutMs: 7 * 60 * 1000 },
@@ -137,12 +143,12 @@ export const DEFAULT_RIDE_TYPES: readonly RideType[] = [
     displayOrder: 20,
     maxPassengers: 6,
     rateCard: {
-      ...baseRateCard(),
-      baseFare: usd(3.75),
-      perMile: usd(1.95),
-      perMinute: usd(0.42),
-      minimumFare: usd(11.5),
-      serviceFee: usd(3.75),
+      ...baseRateCard(currency),
+      baseFare: money(3.75),
+      perMile: money(1.95),
+      perMinute: money(0.42),
+      minimumFare: money(11.5),
+      serviceFee: money(3.75),
     },
     vehicleRequirements: { minSeats: 6, requiredFeatures: [] },
     dispatch: { ...defaultDispatch, searchRadiusMeters: 12_000, offerTimeoutMs: 20_000 },
@@ -159,13 +165,13 @@ export const DEFAULT_RIDE_TYPES: readonly RideType[] = [
     displayOrder: 30,
     maxPassengers: 4,
     rateCard: {
-      ...baseRateCard(),
-      baseFare: usd(6.5),
-      perMile: usd(3.25),
-      perMinute: usd(0.65),
-      minimumFare: usd(19.5),
-      serviceFee: usd(4.5),
-      cancellationFee: usd(10),
+      ...baseRateCard(currency),
+      baseFare: money(6.5),
+      perMile: money(3.25),
+      perMinute: money(0.65),
+      minimumFare: money(19.5),
+      serviceFee: money(4.5),
+      cancellationFee: money(10),
       commissionRate: 0.28,
     },
     vehicleRequirements: {
@@ -187,7 +193,7 @@ export const DEFAULT_RIDE_TYPES: readonly RideType[] = [
     icon: 'accessible',
     displayOrder: 40,
     maxPassengers: 4,
-    rateCard: baseRateCard(),
+    rateCard: baseRateCard(currency),
     vehicleRequirements: { minSeats: 3, requiredFeatures: ['wheelchair_accessible'] },
     dispatch: {
       ...defaultDispatch,
@@ -199,7 +205,11 @@ export const DEFAULT_RIDE_TYPES: readonly RideType[] = [
     shared: false,
     enabled: true,
   },
-];
+  ];
+};
+
+/** The stock catalog in USD. Prefer `defaultRideTypes(currency)`. */
+export const DEFAULT_RIDE_TYPES: readonly RideType[] = defaultRideTypes('USD');
 
 /**
  * A mutable registry of ride types. The API holds one instance; tests and the
@@ -209,7 +219,7 @@ export const DEFAULT_RIDE_TYPES: readonly RideType[] = [
 export class RideTypeCatalog {
   private readonly types = new Map<RideTypeId, RideType>();
 
-  constructor(initial: readonly RideType[] = DEFAULT_RIDE_TYPES) {
+  constructor(initial: readonly RideType[] = defaultRideTypes()) {
     for (const type of initial) this.register(type);
   }
 
@@ -280,4 +290,5 @@ export const vehicleQualifies = (
   return req.requiredFeatures.every((f) => vehicle.features.includes(f));
 };
 
-export const defaultCatalog = (): RideTypeCatalog => new RideTypeCatalog();
+export const defaultCatalog = (currency: CurrencyCode = 'USD'): RideTypeCatalog =>
+  new RideTypeCatalog(defaultRideTypes(currency));

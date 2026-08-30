@@ -20,6 +20,7 @@ import {
   newUserId,
   type Clock,
   type DriverProfile,
+  type PlatformConfig,
   type PlatformEvents,
   type RiderProfile,
   type TypedEmitter,
@@ -74,6 +75,8 @@ export interface AuthServiceDeps {
   readonly clock: Clock;
   readonly events: TypedEmitter<PlatformEvents>;
   readonly sender: CodeSender;
+  /** The market a new account belongs to, so it inherits its locale and currency. */
+  readonly market: PlatformConfig['market'];
   readonly options?: AuthServiceOptions;
 }
 
@@ -251,8 +254,8 @@ export class AuthService {
       firstName: input.firstName?.trim() || 'Rider',
       lastName: input.lastName?.trim() ?? '',
       roles: [input.role],
-      locale: 'en-US',
-      currency: 'USD',
+      locale: this.deps.market.locale,
+      currency: this.deps.market.currency,
       createdAt: this.deps.clock.now(),
       ...(input.email ? { email: input.email } : {}),
     };

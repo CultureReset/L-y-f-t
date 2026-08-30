@@ -405,7 +405,20 @@ const CompletedPanel = ({
 
   const alreadyRated = ride.driverRating !== undefined;
   const fare = ride.finalFare ?? ride.quotedFare;
-  const tipOptions = [0, 200, 300, 500];
+
+  /**
+   * Tips scale with the fare rather than being fixed amounts: a flat $3 is
+   * generous on a short hop and stingy on an airport run, and fixed cents are
+   * meaningless in another currency. Rounded to a whole unit so the buttons
+   * read cleanly.
+   */
+  const tipOptions = useMemo(() => {
+    const unit = 100;
+    const suggestions = [0.15, 0.2, 0.25].map(
+      (rate) => Math.max(unit, Math.round((fare.total.amount * rate) / unit) * unit),
+    );
+    return [0, ...new Set(suggestions)];
+  }, [fare.total.amount]);
 
   const submit = async (): Promise<void> => {
     setSubmitting(true);
@@ -467,7 +480,11 @@ const CompletedPanel = ({
                   key={amount}
                   onPress={() => setTip(amount)}
                   accessibilityRole="button"
-                  accessibilityLabel={amount === 0 ? 'No tip' : `Tip $${amount / 100}`}
+                  accessibilityLabel={
+                    amount === 0
+                      ? 'No tip'
+                      : `Tip ${formatMoney({ amount, currency: fare.total.currency })}`
+                  }
                   style={{
                     flex: 1,
                     paddingVertical: theme.spacing.md,
@@ -480,7 +497,9 @@ const CompletedPanel = ({
                   }}
                 >
                   <Text variant="captionStrong">
-                    {amount === 0 ? 'None' : `$${(amount / 100).toFixed(0)}`}
+                    {amount === 0
+                      ? 'None'
+                      : formatMoney({ amount, currency: fare.total.currency }, { showCents: false })}
                   </Text>
                 </Pressable>
               ))}

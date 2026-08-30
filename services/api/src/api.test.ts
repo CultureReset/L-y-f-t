@@ -1067,6 +1067,69 @@ describe('driver auto-approval', () => {
   });
 });
 
+describe('a non-USD market', () => {
+  /**
+   * Regression: the stock catalog was priced in USD regardless of the market's
+   * configured currency, and new accounts were created as USD/en-US. A EUR
+   * deployment threw on its very first quote.
+   */
+  it('quotes, books, and completes a ride entirely in the market currency', async () => {
+    const eur = await createHarness({
+      config: { market: { currency: 'EUR', locale: 'de-DE', name: 'Berlin' } },
+      seed: { driverCount: 4, seed: 11 },
+    });
+
+    try {
+      const { token: riderToken } = await signIn(eur, '+493055501000', 'rider', {
+        firstName: 'Lena',
+      });
+
+      // The account inherits the market, not a hardcoded default.
+      const me = (await asUser(eur, riderToken).get('/v1/auth/me')).json();
+      expect(me.user.currency).toBe('EUR');
+      expect(me.user.locale).toBe('de-DE');
+
+      const quote = (
+        await eur.app.inject({
+          method: 'POST',
+          url: '/v1/rides/quote',
+          payload: { pickup: FERRY_BUILDING, dropoff: DOLORES_PARK },
+        })
+      ).json();
+      expect(quote.quotes[0].fare.total.currency).toBe('EUR');
+
+      await asUser(eur, riderToken).post('/v1/rider/payment-methods', {
+        kind: 'card',
+        brand: 'visa',
+        last4: '4242',
+      });
+
+      const { rideId } = await bookStandardRide(eur, riderToken);
+      const { token: driverToken, offerId } = await driverWithPendingOffer(eur, rideId);
+      const driver = asUser(eur, driverToken);
+
+      const accepted = (await driver.post(`/v1/driver/offers/${offerId}/accept`)).json();
+      expect(accepted.ride.quotedFare.total.currency).toBe('EUR');
+
+      await driver.post(`/v1/driver/rides/${rideId}/start`);
+      await eur.advance(10 * 60_000);
+      const completed = (await driver.post(`/v1/driver/rides/${rideId}/complete`)).json();
+
+      expect(completed.ride.finalFare.total.currency).toBe('EUR');
+      expect(completed.ride.finalFare.driverPayout.currency).toBe('EUR');
+      for (const item of completed.ride.finalFare.items) {
+        expect(item.amount.currency).toBe('EUR');
+      }
+
+      // And the driver's earnings roll up in the same currency.
+      const earnings = (await driver.get('/v1/driver/earnings?period=today')).json();
+      expect(earnings.summary.total.currency).toBe('EUR');
+    } finally {
+      await eur.close();
+    }
+  });
+});
+
 describe('payments', () => {
   it('surfaces a declined card rather than silently completing the ride', async () => {
     const declining = await createHarness({ declineRate: 1, seed: { driverCount: 4, seed: 3 } });

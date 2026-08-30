@@ -16,6 +16,7 @@ import {
   formatMoney,
   seededRandom,
   systemClock,
+  type CurrencyCode,
   type LatLng,
 } from '@lift/core';
 import { LiftClient } from '@lift/sdk';
@@ -79,6 +80,8 @@ const main = async (): Promise<void> => {
   );
 
   const center: LatLng = config.market.defaultCenter;
+  // Report money in the market's currency, not a hardcoded one.
+  const currency = config.market.currency as CurrencyCode;
 
   console.log('');
   console.log(`  ${config.brandName} — fleet simulator`);
@@ -180,9 +183,9 @@ const main = async (): Promise<void> => {
           : '—'
       }`,
     );
-    console.log(`  rider spend       ${formatMoney({ amount: riderTotals.spent, currency: 'USD' })}`);
+    console.log(`  rider spend       ${formatMoney({ amount: riderTotals.spent, currency })}`);
     console.log(
-      `  driver earnings   ${formatMoney({ amount: driverTotals.earnings, currency: 'USD' })}`,
+      `  driver earnings   ${formatMoney({ amount: driverTotals.earnings, currency })}`,
     );
     console.log('');
   };
